@@ -1,5 +1,6 @@
 # Environment Variables and Secrets
 .env
+.env copy
 .env.local
 .env.development
 .env.test

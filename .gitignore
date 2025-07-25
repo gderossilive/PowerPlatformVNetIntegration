@@ -1,0 +1,173 @@
+# Environment Variables and Secrets
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+*.env
+.env.*
+
+# Azure CLI and PowerShell
+.azure/
+*.log
+*.logs
+**/logs/
+
+# PowerShell
+*.ps1xml
+$RECYCLE.BIN/
+[Dd]esktop.ini
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+
+# Bicep compiled files
+*.json
+!bicep/*.json
+!infra/*.json
+!**/package.json
+!**/package-lock.json
+
+# Azure Resource Manager
+*.azureauth
+*.publishsettings
+
+# Visual Studio Code
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.code-workspace
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+[Dd]esktop.ini
+
+# Temporary files
+*.tmp
+*.temp
+~$*
+*.swp
+*.swo
+*~
+
+# Azure deployment outputs
+deployment-outputs.json
+*.deployment.json
+
+# PowerShell modules
+Modules/
+PSModules/
+
+# Backup files
+*.bak
+*.backup
+*copy*
+*Copy*
+Backup/
+backup/
+
+# IDE and editor files
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+.idea/
+*.iml
+
+# Mac
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Archives
+*.7z
+*.dmg
+*.gz
+*.iso
+*.jar
+*.rar
+*.tar
+*.zip
+
+# Local configuration files that might contain sensitive data
+config.json
+settings.json
+local.settings.json
+appsettings.local.json
+
+# Certificate files
+*.pfx
+*.p12
+*.cer
+*.crt
+*.pem
+*.key
+
+# Azure Functions
+local.settings.json
+bin/
+obj/
+
+# Node.js (if any frontend components)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Python (if any Python scripts)
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+
+# Terraform (if any Terraform files)
+*.tfstate
+*.tfstate.*
+*.tfvars
+.terraform/
+.terraform.lock.hcl
+
+# Generated documentation
+docs/_build/
+
+# Test results
+TestResults/
+*.trx
+*.coverage
+*.coveragexml
+
+# Build results
+[Dd]ebug/
+[Dd]ebugPublic/
+[Rr]elease/
+[Rr]eleases/
+x64/
+x86/
+build/
+bld/
+[Bb]in/
+[Oo]bj/
+
+# Package files
+*.nupkg
+*.snupkg
+*.tgz
+
+# Local History for Visual Studio Code
+.history/
+
+# Azure DevOps
+.vs/

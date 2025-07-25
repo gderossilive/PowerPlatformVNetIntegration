@@ -21,7 +21,7 @@ if (-not (az provider show --namespace Microsoft.PowerPlatform --query "registra
 }
 
 # create a 3 characters long random string to use as a suffix for the resource group name
-$randomSuffix = -join ((65..90) + (97..122) + (0..9) | Get-Random -Count 3 | ForEach-Object { [char]$_ })
+$randomSuffix = -join ((97..122) | Get-Random -Count 3 | ForEach-Object { [char]$_ })
 
 # Set parameters for the deployment
 # 2. Create the resource group where the we want to deploy the resources if it does not yet exist

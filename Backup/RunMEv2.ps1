@@ -1,4 +1,4 @@
-#Requires -Modules Az.Accounts, Az.Resources, Az.KeyVault
+# Requires -Modules Az.Accounts, Az.Resources, Az.KeyVault
 
 Set-StrictMode -Version Latest
 
@@ -113,7 +113,7 @@ function Link-EnterprisePolicyToEnvironment {
     )
     $headers = @{ Authorization = "Bearer $AccessToken" }
     $body = @{ "SystemId" = $SystemId } | ConvertTo-Json
-    $uri = "https://api.powerplatform.com/providers/Microsoft.BusinessAppPlatform/environments/$EnvironmentId/enterprisePolicies/NetworkInjection/link?&api-version=$ApiVersion"
+    $uri = "https://api.bap.microsoft.com/providers/Microsoft.BusinessAppPlatform/environments/$EnvironmentId/enterprisePolicies/NetworkInjection/link?&api-version=$ApiVersion"
     return iwr -Uri $uri -Headers $headers -Method Post -ContentType "application/json" -Body $body -UseBasicParsing
 }
 
@@ -161,36 +161,12 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
 # Step 4: Register Microsoft.PowerPlatform resource provider if needed
 Ensure-ResourceProviderRegistered
 
-# Step 5: Generate a random suffix and build the resource group name
-$randomSuffix = New-RandomSuffix
-$resourceGroupName = "$env:RESOURCE_GROUP-$randomSuffix"
-
-# Step 6: Create the resource group if it does not exist
-Ensure-ResourceGroup -Name $resourceGroupName -Location $env:AZURE_LOCATION
-
-# Step 7: Deploy the main Bicep template (VNets, subnets, enterprise policy)
-$deploymentName = "ppvnetint-$resourceGroupName"
-$azureOutputs = Deploy-BicepTemplate -ResourceGroupName $resourceGroupName -DeploymentName $deploymentName `
-    -TemplateFile ".\bicep\main.bicep" `
-    -Parameters @{
-        environmentGroupName = $env:POWER_PLATFORM_ENVIRONMENT_NAME
-        azureLocation = $env:AZURE_LOCATION
-        enterprisePolicyLocation = $env:POWER_PLATFORM_LOCATION
-        suffix = $randomSuffix
-    }
-
-# Step 8: Deploy Key Vault if required by the deployment outputs
-$deployKeyVaultForTests = $true
-if ($deployKeyVaultForTests -eq "true") {
-    $keyVaultName = "kv-$resourceGroupName"
-    Ensure-KeyVault -Name $keyVaultName -ResourceGroup $resourceGroupName -Location $env:AZURE_LOCATION
-}
-
-# Step 9: Extract enterprise policy details from deployment outputs
-$enterprisePolicyId = $azureOutputs.properties.outputs.enterprisePolicyId.value
-$enterprisePolicyName = $azureOutputs.properties.outputs.enterprisePolicyName.value
+# Step 9: Extract enterprise policy details 
+#$environmentId = (Get-AdminPowerAppEnvironment "$env:POWER_PLATFORM_ENVIRONMENT_NAME").EnvironmentName
+#$enterprisePolicyId = (Get-AzResource -Name "$env:ENTERPRISE_POLICY_NAME" -ResourceGroupName "$env:RESOURCE_GROUP").ResourceId
+#$enterprisePolicyName = (Get-AzResource -Name "$env:ENTERPRISE_POLICY_NAME" -ResourceGroupName "$env:RESOURCE_GROUP").Name
 #$policyArmId = "/subscriptions/$env:SUBSCRIPTION_ID/resourceGroups/$resourceGroupName/providers/Microsoft.PowerPlatform/enterprisePolicies/$enterprisePolicyName"
-$policyArmId = (Get-AzResource -Name $enterprisePolicyName -ResourceGroupName $resourceGroupName).ResourceId
+$policyArmId = (Get-AzResource -Name "$env:ENTERPRISE_POLICY_NAME" -ResourceGroupName "$env:RESOURCE_GROUP").ResourceId
 
 # Step 10: Get an access token for the Power Platform Admin API
 $powerPlatformAdminApiToken = Get-PowerPlatformAccessToken
@@ -199,10 +175,12 @@ $powerPlatformAdminApiToken = Get-PowerPlatformAccessToken
 $powerPlatformEnvironmentId = Get-PowerPlatformEnvironmentId -AccessToken $powerPlatformAdminApiToken -DisplayName $env:POWER_PLATFORM_ENVIRONMENT_NAME
 
 # Step 12: Get the SystemId for the enterprise policy resource
-$systemId = az resource show --ids $enterprisePolicyId --query "properties.systemId" -o tsv
+$systemId = az resource show --ids $policyArmId --query "properties.systemId" -o tsv
 
 # Step 13: Link the enterprise policy to the Power Platform environment
-$linkResult = Link-EnterprisePolicyToEnvironment -AccessToken $powerPlatformAdminApiToken -EnvironmentId $powerPlatformEnvironmentId -SystemId $systemId
+$linkResult = Link-EnterprisePolicyToEnvironment -AccessToken $powerPlatformAdminApiToken -EnvironmentId $powerPlatformEnvironmentId -SystemId $systemId 
+
+($linkResult.Content | ConvertFrom-Json).state
 
 # Step 14: Wait for link operation to complete
 $operationLink = $linkResult.Headers.'operation-location'
@@ -210,7 +188,7 @@ $pollInterval = 10 # seconds
 $run = $true
 while ($run) {
     Start-Sleep -Seconds $pollInterval
-    $powerPlatformAdminApiToken = az account get-access-token --resource $powerPlatformAdminApiUrl --query accessToken --output tsv
+    $powerPlatformAdminApiToken = Get-PowerPlatformAccessToken
     $headers = @{ 
         Authorization = "Bearer $powerPlatformAdminApiToken" 
         "Content-Type" = "application/json"

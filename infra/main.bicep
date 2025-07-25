@@ -83,10 +83,18 @@ param suffix string
 param baseName string = 'pythonfunc'
 
 @description('Environment name (dev, test, prod)')
-param environment string = 'dev'
+param environment string = 'prod'
 
-@description('Location for resources')
-param location string = resourceGroup().location
+@description('Name of the APIM instance')
+param apimName string = 'apim-dev'
+
+@description('Publisher email for APIM')
+param apimPublisherEmail string = 'admin@contoso.com'
+
+@description('Publisher name for APIM')
+param apimPublisherName string = 'Contoso Admin'
+
+// Removed unused location parameter for clarity
 
 /* Variables */
 var failoverLocations = {
@@ -147,6 +155,9 @@ var networksConfiguration = [
   }
 ]
 
+var random = uniqueString(resourceGroup().id, environmentGroupName, azureLocation, baseName, environment)
+var APIMName = 'apim-${random}-${suffix}'
+
 /* Resources */
 // Primary and failover VNet and Subnets
 module networks 'vnet-subnet-with-delegation-module.bicep' = [for network in networksConfiguration: {
@@ -161,6 +172,39 @@ module networks 'vnet-subnet-with-delegation-module.bicep' = [for network in net
     privateEndpointsSnetAddressPrefixes: network.privateEndpointsSnetAddressPrefixes
   }
 }]
+
+// APIM with private endpoint in West Europe VNet (primary)
+module apimWithPrivateEndpoint 'apim-with-private-endpoint.bicep' = {
+  name: APIMName
+  params: {
+    apimName: APIMName
+    location: 'westeurope'
+    privateEndpointSubnetId: networks[0].outputs.privateEndpointSnetId
+    publisherEmail: apimPublisherEmail
+    publisherName: apimPublisherName
+  }
+}
+
+/*
+// Import Petstore API into APIM
+module apimImportPetstoreApi 'apim-import-petstore-api.bicep' = {
+  name: 'import-petstore-api'
+  params: {
+    apimName: APIMName
+    apiName: 'petstore'
+    apiDisplayName: 'Petstore Swagger API'
+    apiPath: 'petstore'
+    openApiUrl: 'https://petstore3.swagger.io/api/v3/openapi.json'
+    userId: '/users/gderossi' // You may need to use the full APIM user resource ID
+    subscriptionName: 'petstore-subscription-gderossi'
+    subscriptionDisplayName: 'Petstore Subscription for gderossi'
+  }
+  dependsOn: [apimWithPrivateEndpoint]
+}
+
+// Add subscription key for user 'gderossi' to Petstore API
+
+*/
 
 // Array of objects for the Enterprise Policy creation
 var vnetSubnets = [
@@ -189,20 +233,24 @@ module enterprisePolicy 'powerplatform-network-injection-enterprise-policy-modul
   }
 }
 
-// Generate unique names for resources
-var functionAppName = '${baseName}-${environment}-func'
-var storageAccountName = '${replace(baseName, '-', '')}${environment}sa'
-
-
-
 /* Outputs */
-output primaryVnetId string = networks[0].outputs.vnetId
-output primarySubnetId string = networks[0].outputs.injectionSnetId
+output primaryVnetName string = networks[0].outputs.vnetName
 output primarySubnetName string = networks[0].outputs.injectionSnetName
-output failoverVnetId string = networks[1].outputs.vnetId
-output failoverSubnetId string = networks[1].outputs.injectionSnetId
+output failoverVnetName string = networks[1].outputs.vnetName
 output failoverSubnetName string = networks[1].outputs.injectionSnetName
-output enterprisePolicyId string = deployEnterprisePolicy ? enterprisePolicy.outputs.enterprisePolicyId : 'Enterprise Policy not deployed'
-output enterprisePolicyName string = deployEnterprisePolicy ? enterprisePolicy.outputs.enterprisePolicyName : 'Enterprise Policy not deployed'
-output deployKeyVaultForTests bool = deployKeyVaultForTests
+output enterprisePolicyName string = deployEnterprisePolicy ? enterprisePolicy.outputs.enterprisePolicyName : ''
+output resourceGroup string = resourceGroup().name
 
+output apimName string = apimWithPrivateEndpoint.outputs.apimName
+output apimId string = apimWithPrivateEndpoint.outputs.apimId
+output apimPrivateEndpointId string = apimWithPrivateEndpoint.outputs.privateEndpointId
+output privateEndpointSubnetId string = networks[0].outputs.privateEndpointSnetId
+
+/*
+output petstoreApiName string = apimImportPetstoreApi.outputs.apiName
+output petstoreApiId string = apimImportPetstoreApi.outputs.apiId
+
+output petstoreApiSubscriptionId string = apimImportPetstoreApi.outputs.subscriptionId
+output petstoreApiPrimaryKey string = apimImportPetstoreApi.outputs.primaryKey
+output petstoreApiSecondaryKey string = apimImportPetstoreApi.outputs.secondaryKey
+*/

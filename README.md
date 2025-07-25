@@ -53,14 +53,19 @@ Run the infrastructure creation script:
 This script performs the following actions:
 1. **Authentication**: Logs into Azure using the specified tenant and subscription
 2. **Resource Provider Registration**: Ensures Microsoft.PowerPlatform provider is registered
-3. **Resource Group Creation**: Creates a resource group with a random suffix
+3. **Resource Group Creation**: Creates a resource group with a fixed suffix ("xwz" for consistency)
 4. **Infrastructure Deployment**: Deploys all Azure resources using Bicep templates:
    - Primary and secondary virtual networks with subnets
    - Azure API Management instance
    - Private endpoints
    - Enterprise policy for Power Platform (with subnet delegation)
-5. **APIM Configuration**: Updates APIM to disable public access and enable VNet integration
+5. **APIM Configuration**: Updates APIM to disable public access and remove VNet integration
 6. **Environment Variables Update**: Updates the `.env` file with deployment outputs
+
+**Key APIM Configuration Changes:**
+- Sets `--public-network-access false` to disable public access
+- Uses `--virtual-network None` to remove VNet integration (simplified approach)
+- Waits 120 seconds for private endpoint provisioning before configuration updates
 
 ### Step 2: Subnet Injection Setup
 Run the subnet injection setup script:
@@ -70,25 +75,21 @@ Run the subnet injection setup script:
 ```
 
 This script performs the following actions:
-1. **Environment Loading**: Loads configuration from the `.env` file
+1. **Environment Loading**: Loads configuration from the `.env` file using helper functions
 2. **Azure Authentication**: Ensures proper Azure login and subscription context
 3. **Enterprise Policy Linking**: Links the enterprise policy to the Power Platform environment using:
-   - Power Platform Admin API authentication
-   - Environment ID resolution by display name
-   - Enterprise policy SystemId extraction
-   - API-based linking operation
-4. **Operation Monitoring**: Polls the linking operation until completion
+   - Power Platform Admin API authentication with automatic token refresh
+   - Environment ID resolution by display name via REST API
+   - Enterprise policy SystemId extraction from Azure Resource Manager
+   - API-based linking operation with proper headers and JSON payload
+4. **Operation Monitoring**: Polls the linking operation until completion with configurable timeouts
 
-**Key Features:**
-- Uses Azure REST API calls for Power Platform integration
-- Automatic token management and refresh
-- Polling mechanism to wait for asynchronous operations
-- Comprehensive error handling and status reporting
-
-**Important Notes:**
-- The enterprise policy is created during Step 1 with proper subnet delegation
-- Step 2 focuses specifically on linking the policy to the Power Platform environment
-- The linking operation is asynchronous and requires polling for completion status
+**Enhanced Features:**
+- **Modular Functions**: Well-structured helper functions for better maintainability
+- **Error Handling**: Comprehensive error handling with status code validation
+- **Token Management**: Automatic token refresh for long-running operations
+- **Operation Polling**: Robust polling mechanism with configurable intervals and retries
+- **Strict Mode**: Uses PowerShell strict mode for better error detection
 
 ## Infrastructure Components
 
@@ -129,8 +130,16 @@ The deployment follows a specific sequence to handle Azure resource dependencies
 
 1. **APIM Creation**: Created with public access enabled (required for initial provisioning)
 2. **Private Endpoint**: Created after APIM is ready
-3. **APIM Update**: PowerShell script updates APIM configuration to disable public access and enable VNet integration
-4. **Enterprise Policy**: Created and linked to Power Platform environments
+3. **APIM Configuration Update**: PowerShell script updates APIM to:
+   - Disable public access (`--public-network-access false`)
+   - Remove VNet integration (`--virtual-network None`) for simplified setup
+4. **Enterprise Policy**: Created during Bicep deployment with proper subnet delegation
+5. **Policy Linking**: Separate script links enterprise policy to Power Platform environment
+
+**Key Design Decisions:**
+- **Fixed Suffix**: Uses "xwz" suffix for all resources to ensure consistent naming
+- **Simplified APIM**: Removes complex VNet integration while maintaining private endpoint connectivity
+- **Modular Approach**: Separates infrastructure creation from Power Platform environment linking
 
 ## Troubleshooting
 
@@ -139,22 +148,41 @@ The deployment follows a specific sequence to handle Azure resource dependencies
 1. **APIM Deployment Errors**: 
    - Ensure APIM is created with public access enabled initially
    - Private endpoint must be created before updating APIM configuration
+   - Current approach uses simplified configuration (`--virtual-network None`)
 
-2. **Subnet Delegation Issues**:
-   - Verify subnets are properly delegated to Microsoft.PowerPlatform/enterprisePolicies
-   - Check that subnets have sufficient IP address space
+2. **APIM Configuration Updates**:
+   - Script waits 120 seconds for private endpoint to be ready before APIM updates
+   - Public access is disabled (`--public-network-access false`)
+   - VNet integration is removed (`--virtual-network None`) for simplified deployment
 
-3. **Enterprise Policy Linking**:
-   - Ensure proper permissions are granted
-   - Verify Power Platform environment exists and is accessible
+3. **Enterprise Policy Linking Issues**:
+   - Verify Power Platform environment exists and display name matches exactly
+   - Check that enterprise policy was created successfully in Step 1
+   - Ensure proper API permissions for Power Platform Admin API access
+
+4. **Subnet Delegation Issues**:
+   - Subnets are automatically delegated during Bicep deployment
+   - Verify subnets have sufficient IP address space
+   - Check that subnets are properly configured in the VNet modules
 
 ### Validation
 
 After deployment, verify:
-- APIM instance is accessible through private endpoint
-- Public access to APIM is disabled
+- APIM instance is created and public access is disabled
+- Private endpoint exists and is connected to APIM
 - Enterprise policy is linked to Power Platform environment
-- Subnets are properly delegated
+- Resource group contains all expected resources with consistent naming (suffix "xwz")
+
+### Current Configuration Notes
+
+**Fixed Naming Convention:**
+- Resource group suffix is hardcoded to "xwz" for consistency
+- All resources use this consistent suffix for easy identification
+
+**Simplified APIM Setup:**
+- APIM public access is disabled post-deployment
+- VNet integration is not configured (using `None` setting)
+- Private endpoint provides secure connectivity without complex VNet integration
 
 ## File Structure
 
@@ -179,7 +207,9 @@ After deployment, verify:
 ---
 
 ## Notes
-- The infrastructure uses a three-step deployment approach to handle APIM private endpoint requirements
-- Random suffixes are used for resource names to ensure uniqueness
+- The infrastructure uses a simplified APIM deployment approach with private endpoints but without VNet integration
+- Fixed suffix "xwz" is used for all resource names to ensure consistency across deployments
 - The solution supports both primary and secondary regions for high availability
 - Environment variables are automatically updated after successful deployment
+- The `2-SubnetInjectionSetup.ps1` script uses modular functions for better maintainability and error handling
+- Enterprise policy linking is handled separately from infrastructure deployment for better separation of concerns

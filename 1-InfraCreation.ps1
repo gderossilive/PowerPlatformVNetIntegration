@@ -72,8 +72,8 @@ if ($apimName -and $privateEndpointSubnetId) {
         az apim update --name $apimName --resource-group $resourceGroupName --subscription $env:SUBSCRIPTION_ID --public-network-access false
         
         Write-Output "Configuring VNet integration..."
-        az apim update --name $apimName --resource-group $resourceGroupName --subscription $env:SUBSCRIPTION_ID --virtual-network External --subnet-id $privateEndpointSubnetId
-        
+        az apim update --name $apimName --resource-group $resourceGroupName --subscription $env:SUBSCRIPTION_ID --virtual-network None 
+
         Write-Output "APIM configuration updated successfully"
         
     } catch {

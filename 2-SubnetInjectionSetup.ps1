@@ -162,7 +162,7 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
 # Step 4: Extract enterprise policy details 
 #$environmentId = (Get-AdminPowerAppEnvironment "$env:POWER_PLATFORM_ENVIRONMENT_NAME").EnvironmentName
 #$enterprisePolicyId = (Get-AzResource -Name "$env:ENTERPRISE_POLICY_NAME" -ResourceGroupName "$env:RESOURCE_GROUP").ResourceId
-#$enterprisePolicyName = (Get-AzResource -Name "$env:ENTERPRISE_POLICY_NAME" -ResourceGroupName "$env:RESOURCE_GROUP").Name
+$enterprisePolicyName = (Get-AzResource -Name "$env:ENTERPRISE_POLICY_NAME" -ResourceGroupName "$env:RESOURCE_GROUP").Name
 #$policyArmId = "/subscriptions/$env:SUBSCRIPTION_ID/resourceGroups/$resourceGroupName/providers/Microsoft.PowerPlatform/enterprisePolicies/$enterprisePolicyName"
 $policyArmId = (Get-AzResource -Name "$env:ENTERPRISE_POLICY_NAME" -ResourceGroupName "$env:RESOURCE_GROUP").ResourceId
 
@@ -179,7 +179,6 @@ $systemId = az resource show --ids $policyArmId --query "properties.systemId" -o
 $linkResult = Link-EnterprisePolicyToEnvironment -AccessToken $powerPlatformAdminApiToken -EnvironmentId $powerPlatformEnvironmentId -SystemId $systemId
 
 # Step 9: Wait for link operation to complete
-$operationLink = ($linkResult.Content | ConvertFrom-Json).state
 $operationLink = $linkResult.Headers.'operation-location'
 $pollInterval = 10 # seconds
 $run = $true

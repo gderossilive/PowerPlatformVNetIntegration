@@ -14,9 +14,65 @@ The solution creates:
 ## Prerequisites
 - Azure subscription with Contributor role access
 - Azure CLI installed and configured
-- PowerShell 5.1 or later
+- PowerShell 5.1 or later (PowerShell Core 7+ recommended)
 - Power Platform admin permissions
 - Azure PowerShell modules for Power Platform cmdlets
+
+## Development Environment
+
+### Dev Container Setup
+This repository includes a complete development environment configuration using VS Code Dev Containers. The dev container automatically installs and configures all necessary tools.
+
+**Included Tools:**
+- **PowerShell Core (pwsh)**: Latest PowerShell 7+ for cross-platform scripting
+- **Azure CLI**: For Azure resource management and authentication
+- **Azure Bicep**: For Infrastructure as Code template authoring
+- **Azure Developer CLI (azd)**: For streamlined Azure deployments
+- **Ubuntu 24.04 LTS**: As the base container environment
+
+**Getting Started with Dev Container:**
+1. Open this repository in VS Code
+2. When prompted, click "Reopen in Container" or use `Ctrl+Shift+P` → "Dev Containers: Reopen in Container"
+3. Wait for the container to build (first time may take a few minutes)
+4. Once ready, all tools will be available in the integrated terminal
+
+**Using PowerShell in the Dev Container:**
+```bash
+# Start PowerShell session
+pwsh
+
+# Run PowerShell scripts directly
+pwsh ./1-InfraCreation.ps1
+pwsh ./2-SubnetInjectionSetup.ps1
+
+# Execute PowerShell commands
+pwsh -c "Get-Date"
+```
+
+**Manual Installation (if not using dev container):**
+If you prefer to set up the environment manually, ensure you have:
+- PowerShell Core 7+ installed (`pwsh` command available)
+- Azure CLI with login configured (`az login`)
+- Azure Bicep CLI extension (`az bicep install`)
+- Appropriate PowerShell modules for Power Platform operations
+
+## Recent Updates & Fixes
+
+### Latest Changes (July 2025)
+- ✅ **Fixed Dev Container Configuration**: Added PowerShell Core support to `.devcontainer/devcontainer.json`
+- ✅ **Cross-Platform Compatibility**: Updated PowerShell scripts for Linux/Unix environments
+- ✅ **Azure CLI Integration**: Enhanced authentication checks and error handling
+- ✅ **Bicep Template Fixes**: 
+  - Fixed Sweden central region failover location mapping
+  - Resolved parameter mismatches in `main.parameters.json`
+  - Added missing enterprise policy name output
+- ✅ **azd Integration**: Updated PowerShell scripts to work with Azure Developer CLI deployment model
+- ✅ **Network Configuration**: Resolved subnet IP range validation issues
+
+### Breaking Changes
+- **PowerShell Execution**: Scripts now use `pwsh` (PowerShell Core) instead of Windows PowerShell
+- **azd Deployment**: Infrastructure deployment now uses `azd up` instead of direct `az deployment` commands
+- **Parameter Structure**: Simplified parameter files to match Bicep template definitions
 
 ## Environment Configuration
 
@@ -43,29 +99,40 @@ APIM_ID=
 
 ## Deployment Process
 
-### Step 1: Infrastructure Creation
-Run the infrastructure creation script:
+### Prerequisites
+Before running the deployment scripts, ensure you have:
+1. **Azure CLI Authentication**: Run `az login` to authenticate
+2. **PowerShell Core Available**: The dev container includes `pwsh` automatically
+3. **Environment Variables Configured**: Update the `.env` file with your values
 
-```powershell
-.\1-InfraCreation.ps1
+### Step 1: Infrastructure Creation
+Run the infrastructure creation script using PowerShell Core:
+
+```bash
+# Ensure you're logged into Azure CLI
+az login
+
+# Run the infrastructure deployment script
+pwsh ./1-InfraCreation.ps1
 ```
 
 This script performs the following actions:
-1. **Authentication**: Logs into Azure using the specified tenant and subscription
-2. **Resource Provider Registration**: Ensures Microsoft.PowerPlatform provider is registered
-3. **Resource Group Creation**: Creates a resource group with a fixed suffix ("xwz" for consistency)
-4. **Infrastructure Deployment**: Deploys all Azure resources using Bicep templates:
+1. **Cross-Platform Setup**: Automatically detects Linux/macOS and skips Windows-specific commands
+2. **Azure Authentication Check**: Verifies Azure CLI login status before proceeding
+3. **Subscription Context**: Sets the correct Azure subscription from environment variables
+4. **Resource Provider Registration**: Ensures Microsoft.PowerPlatform provider is registered
+5. **Azure Developer CLI Deployment**: Uses `azd up` to deploy all infrastructure:
    - Primary and secondary virtual networks with subnets
-   - Azure API Management instance
-   - Private endpoints
+   - Azure API Management instance with private endpoints
    - Enterprise policy for Power Platform (with subnet delegation)
-5. **APIM Configuration**: Updates APIM to disable public access and remove VNet integration
-6. **Environment Variables Update**: Updates the `.env` file with deployment outputs
+6. **APIM Configuration**: Updates APIM to disable public access and configure private connectivity
+7. **Environment Variables Update**: Updates the `.env` file with deployment outputs
 
-**Key APIM Configuration Changes:**
-- Sets `--public-network-access false` to disable public access
-- Uses `--virtual-network None` to remove VNet integration (simplified approach)
-- Waits 120 seconds for private endpoint provisioning before configuration updates
+**Key Improvements:**
+- **Platform Detection**: Uses PowerShell Core's `$IsLinux`/`$IsMacOS` variables for cross-platform compatibility
+- **Error Handling**: Comprehensive error checking with meaningful exit codes
+- **Azure Developer CLI Integration**: Leverages `azd` for streamlined deployment experience
+- **Output Mapping**: Automatically maps azd outputs to expected variable structure
 
 ### Step 2: Subnet Injection Setup
 Run the subnet injection setup script:
@@ -380,7 +447,29 @@ The deployment follows a specific sequence to handle Azure resource dependencies
 
 ## Troubleshooting
 
-### Common Issues
+### Recent Issues & Solutions
+
+#### 1. **Set-ExecutionPolicy Error on Linux**
+**Error**: `Operation is not supported on this platform`
+**Solution**: ✅ Fixed - Script now detects Linux/macOS and skips Windows-specific commands
+
+#### 2. **Azure CLI Authentication Issues**
+**Error**: `Please run 'az login' to setup account`
+**Solution**: ✅ Fixed - Added automatic authentication checks with helpful error messages
+
+#### 3. **Subnet Range Outside VNet Error**
+**Error**: `Subnet 'snet-injection-xx' is not valid because its IP address range is outside the IP address range of virtual network`
+**Solution**: ✅ Fixed - Corrected Sweden region failover mapping and parameter validation
+
+#### 4. **azd Command Syntax Errors**
+**Error**: `unknown flag: --location`
+**Solution**: ✅ Fixed - Updated to use correct `azd up --environment` syntax
+
+#### 5. **Parameter Mismatch Errors**
+**Error**: Deployment fails with undefined parameter references
+**Solution**: ✅ Fixed - Cleaned up `main.parameters.json` to match `main.bicep` parameters exactly
+
+### Legacy Issues
 
 1. **APIM Deployment Errors**: 
    - Ensure APIM is created with public access enabled initially
@@ -408,18 +497,30 @@ After deployment, verify:
 - APIM instance is created and public access is disabled
 - Private endpoint exists and is connected to APIM
 - Enterprise policy is linked to Power Platform environment
-- Resource group contains all expected resources with consistent naming (suffix "xwz")
+- Resource group contains all expected resources with consistent naming (suffix from `uniqueString()`)
 
 ### Current Configuration Notes
 
-**Fixed Naming Convention:**
-- Resource group suffix is hardcoded to "xwz" for consistency
+**Modern Development Environment:**
+- PowerShell Core 7+ for cross-platform compatibility
+- Azure Developer CLI (azd) for streamlined deployments
+- VS Code Dev Container with all tools pre-configured
+- Ubuntu 24.04 LTS base environment
+
+**Dynamic Resource Naming:**
+- Resource group suffix is generated using `uniqueString()` function
 - All resources use this consistent suffix for easy identification
+- Format: `{environmentName}-{3-char-hash}`
 
 **Simplified APIM Setup:**
 - APIM public access is disabled post-deployment
 - VNet integration is not configured (using `None` setting)
 - Private endpoint provides secure connectivity without complex VNet integration
+
+**Regional Failover Support:**
+- Fixed Sweden Central region mapping (now points to North Europe)
+- All supported Azure regions have proper failover pairs defined
+- Automatic secondary region selection based on primary region
 
 ## File Structure
 
@@ -444,9 +545,26 @@ After deployment, verify:
 ---
 
 ## Notes
+
+### Current Implementation (July 2025)
 - The infrastructure uses a simplified APIM deployment approach with private endpoints but without VNet integration
-- Fixed suffix "xwz" is used for all resource names to ensure consistency across deployments
+- Dynamic suffix using `uniqueString()` function ensures unique resource names across deployments
+- Cross-platform PowerShell Core support enables development on Windows, Linux, and macOS
+- Azure Developer CLI (azd) integration provides streamlined deployment experience
 - The solution supports both primary and secondary regions for high availability
 - Environment variables are automatically updated after successful deployment
 - The `2-SubnetInjectionSetup.ps1` script uses modular functions for better maintainability and error handling
 - Enterprise policy linking is handled separately from infrastructure deployment for better separation of concerns
+
+### Development Environment Features
+- **Dev Container**: Complete development environment with all tools pre-installed
+- **PowerShell Core**: Cross-platform scripting with `pwsh` command
+- **Azure CLI**: Integrated authentication and resource management
+- **Azure Bicep**: Infrastructure as Code with IntelliSense support
+- **azd Integration**: Simplified deployment workflows
+
+### Compatibility Notes
+- **PowerShell**: Requires PowerShell Core 7+ (`pwsh`) for cross-platform support
+- **Azure CLI**: Must be logged in (`az login`) before running deployment scripts
+- **azd**: Uses Azure Developer CLI for deployment orchestration
+- **Bicep**: Latest Bicep CLI extension recommended for template validation

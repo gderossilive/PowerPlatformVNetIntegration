@@ -6,7 +6,7 @@
       "value": "${AZURE_ENV_NAME}"
     },
     "resourceGroupName": {
-      "value": "rg-${AZURE_ENV_NAME}"
+      "value": "${AZURE_ENV_NAME}"
     },
     "environmentGroupName": {
       "value": "${AZURE_ENV_NAME}"
@@ -14,20 +14,11 @@
     "azureLocation": {
       "value": "${AZURE_LOCATION}"
     },
-    "location": {
-      "value": "${AZURE_LOCATION}"
-    },
     "enterprisePolicyLocation": {
-      "value": "unitedstates"
+      "value": "europe"
     },
     "deployEnterprisePolicy": {
       "value": true
-    },
-    "deployKeyVaultForTests": {
-      "value": true
-    },
-    "suffix": {
-      "value": "001"
     },
     "apimPublisherEmail": {
       "value": "${APIM_PUBLISHER_EMAIL=admin@contoso.com}"

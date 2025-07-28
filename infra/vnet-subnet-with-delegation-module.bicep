@@ -43,7 +43,7 @@ param resourceToken string
 /* Resources */
 // Virtual Network
 resource virtualNetwork 'Microsoft.Network/virtualNetworks@2024-01-01' = {
-  name: 'az-vnet-${resourceToken}'
+  name: 'az-vnet-${locationSuffix}-${networkCategory}-${resourceToken}'
   location: location
   tags: {
     'azd-env-name': environmentName
@@ -59,7 +59,7 @@ resource virtualNetwork 'Microsoft.Network/virtualNetworks@2024-01-01' = {
 
 // Network Security Groups
 resource networkSecurityGroup 'Microsoft.Network/networkSecurityGroups@2020-06-01' = {
-  name: 'az-nsg-${resourceToken}'
+  name: 'az-nsg-${locationSuffix}-${networkCategory}-${resourceToken}'
   location: location
   tags: {
     'azd-env-name': environmentName
@@ -72,7 +72,7 @@ resource networkSecurityGroup 'Microsoft.Network/networkSecurityGroups@2020-06-0
 // Subnet
 // With delegations to the Microsoft.PowerPlatform/enterprisePolicies service
 resource injectionSnet 'Microsoft.Network/virtualNetworks/subnets@2024-01-01' = {
-  name: 'snet-injection-${resourceToken}'
+  name: 'snet-injection-${locationSuffix}-${networkCategory}-${resourceToken}'
   parent: virtualNetwork
   properties: {
     addressPrefix: injectionSnetAddressPrefixes
@@ -95,7 +95,7 @@ resource injectionSnet 'Microsoft.Network/virtualNetworks/subnets@2024-01-01' = 
 
 // Private Endpoint Subnet
 resource privateEndpointSnet 'Microsoft.Network/virtualNetworks/subnets@2024-01-01' = {
-  name: 'snet-pe-${resourceToken}'
+  name: 'snet-pe-${locationSuffix}-${networkCategory}-${resourceToken}'
   parent: virtualNetwork
   dependsOn: [
     injectionSnet

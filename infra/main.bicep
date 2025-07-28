@@ -52,9 +52,6 @@ param environmentGroupName string
 @description('Primary location for all resources')
 param azureLocation string
 
-@description('Primary location for all resources (alias for azureLocation)')
-param location string
-
 @allowed([
   'unitedstates'
   'canada'
@@ -81,10 +78,6 @@ param enterprisePolicyLocation string
 @description('Boolean to define if the Enterprise Policy resource should be deployed - to avoid errors if the enterprise policy is already linked to Power Platforme environments')
 param deployEnterprisePolicy bool = true
 
-@minLength(1)
-@maxLength(3)
-param suffix string 
-
 @description('Publisher email for APIM')
 param apimPublisherEmail string = 'admin@contoso.com'
 
@@ -94,7 +87,9 @@ param apimPublisherName string = 'Contoso Admin'
 // Removed unused location parameter for clarity
 
 /* Variables */
-var resourceToken = uniqueString(subscription().id, location, environmentName)
+param timeStamp string = utcNow()
+var resourceToken = substring(uniqueString(timeStamp),0,3)
+var rgName = '${resourceGroupName}-${resourceToken}'
 
 var failoverLocations = {
   eastus: 'westus'
@@ -130,7 +125,7 @@ var failoverLocations = {
   norwaywest: 'norwayeast'
   norwayeast: 'norwaywest'
   singapore: 'southeastasia'
-  swedencentral: 'swedencentral'
+  swedencentral: 'northeurope'
 }
 
 var failoverLocation = failoverLocations[azureLocation]
@@ -159,19 +154,22 @@ var APIMName = 'az-apim-${resourceToken}'
 /* Resources */
 // Resource Group
 resource resourceGroup 'Microsoft.Resources/resourceGroups@2021-04-01' = {
-  name: resourceGroupName
-  location: location
+  name: rgName
+  location: azureLocation
   tags: {
     'azd-env-name': environmentName
   }
 }
+
+var idName = 'id-${resourceToken}'
+
 // Minimal managed identity for azd compatibility (optional, uses user credentials)
 module minimalIdentity 'minimal-identity.bicep' = {
   name: 'minimal-identity'
   scope: resourceGroup
   params: {
-    identityName: 'id-${resourceToken}'
-    location: location
+    identityName: idName
+    location: azureLocation
     environmentName: environmentName
   }
 }
@@ -199,7 +197,7 @@ module apimWithPrivateEndpoint 'apim-with-private-endpoint.bicep' = {
   scope: resourceGroup
   params: {
     apimName: APIMName
-    location: 'westeurope'
+    location: azureLocation
     privateEndpointSubnetId: networks[0].outputs.privateEndpointSnetId
     publisherEmail: apimPublisherEmail
     publisherName: apimPublisherName
@@ -251,7 +249,7 @@ module enterprisePolicy 'powerplatform-network-injection-enterprise-policy-modul
     environmentGroupName: environmentGroupName
     location: enterprisePolicyLocation
     vnetSubnets: vnetSubnets
-    suffix: suffix // Use the suffix from the primary network
+    suffix: resourceToken // Use the suffix from the primary network
   }
 }
 
@@ -267,6 +265,7 @@ output apimName string = apimWithPrivateEndpoint.outputs.apimName
 output apimId string = apimWithPrivateEndpoint.outputs.apimId
 output apimPrivateEndpointId string = apimWithPrivateEndpoint.outputs.privateEndpointId
 output privateEndpointSubnetId string = networks[0].outputs.privateEndpointSnetId
+output enterprisePolicyName string = 'ep-${environmentGroupName}-${resourceToken}'
 
 // Minimal managed identity outputs for azd compatibility
 output AZURE_CLIENT_ID string = minimalIdentity.outputs.clientId

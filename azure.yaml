@@ -1,0 +1,15 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
+
+name: powerplatform-vnet-integration
+metadata:
+  template: powerplatform-vnet-integration@0.0.1-beta
+
+infra:
+  provider: bicep
+  path: infra
+
+# No services defined as this is infrastructure-only deployment
+services: {}
+
+# Use user credentials for authentication (no managed identity required)
+# azd will use your logged-in Azure CLI credentials

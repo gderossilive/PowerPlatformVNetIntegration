@@ -34,11 +34,20 @@ param injectionSnetAddressPrefixes string = '10.10.0.0/24'
 @description('Address prefixes for the subnet used for private endpoints')
 param privateEndpointsSnetAddressPrefixes string = '10.10.1.0/24'
 
+@description('Environment name for resource tagging')
+param environmentName string = ''
+
+@description('Resource token for unique naming')
+param resourceToken string
+
 /* Resources */
 // Virtual Network
 resource virtualNetwork 'Microsoft.Network/virtualNetworks@2024-01-01' = {
-  name: 'vnet-${powerPlatformEnvironmentName}-${networkCategory}-${locationSuffix}'
+  name: 'az-vnet-${resourceToken}'
   location: location
+  tags: {
+    'azd-env-name': environmentName
+  }
   properties: {
     addressSpace: {
       addressPrefixes: [
@@ -50,8 +59,11 @@ resource virtualNetwork 'Microsoft.Network/virtualNetworks@2024-01-01' = {
 
 // Network Security Groups
 resource networkSecurityGroup 'Microsoft.Network/networkSecurityGroups@2020-06-01' = {
-  name: 'nsg-${powerPlatformEnvironmentName}-${networkCategory}-${locationSuffix}'
+  name: 'az-nsg-${resourceToken}'
   location: location
+  tags: {
+    'azd-env-name': environmentName
+  }
   properties: {
     securityRules: []
   }
@@ -60,7 +72,7 @@ resource networkSecurityGroup 'Microsoft.Network/networkSecurityGroups@2020-06-0
 // Subnet
 // With delegations to the Microsoft.PowerPlatform/enterprisePolicies service
 resource injectionSnet 'Microsoft.Network/virtualNetworks/subnets@2024-01-01' = {
-  name: 'snet-${powerPlatformEnvironmentName}-${networkCategory}-${locationSuffix}'
+  name: 'snet-injection-${resourceToken}'
   parent: virtualNetwork
   properties: {
     addressPrefix: injectionSnetAddressPrefixes
@@ -83,7 +95,7 @@ resource injectionSnet 'Microsoft.Network/virtualNetworks/subnets@2024-01-01' = 
 
 // Private Endpoint Subnet
 resource privateEndpointSnet 'Microsoft.Network/virtualNetworks/subnets@2024-01-01' = {
-  name: 'private-endpoints-snet-${powerPlatformEnvironmentName}-${networkCategory}-${locationSuffix}'
+  name: 'snet-pe-${resourceToken}'
   parent: virtualNetwork
   dependsOn: [
     injectionSnet

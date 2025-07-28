@@ -1,7 +1,13 @@
 /* Deployment scope */
-targetScope = 'resourceGroup'
+targetScope = 'subscription'
 
 /* Parameters */
+@description('Environment name for resource tagging')
+param environmentName string = ''
+
+@description('Resource group name')
+param resourceGroupName string
+
 @minLength(1)
 @maxLength(50)
 @description('Name of the Power Platform environment group considered for the VNet integration enterprise policy')
@@ -46,6 +52,9 @@ param environmentGroupName string
 @description('Primary location for all resources')
 param azureLocation string
 
+@description('Primary location for all resources (alias for azureLocation)')
+param location string
+
 @allowed([
   'unitedstates'
   'canada'
@@ -72,21 +81,9 @@ param enterprisePolicyLocation string
 @description('Boolean to define if the Enterprise Policy resource should be deployed - to avoid errors if the enterprise policy is already linked to Power Platforme environments')
 param deployEnterprisePolicy bool = true
 
-@description('Boolean to define if the Key Vault resource should be deployed - to avoid errors if the Key Vault is already created')
-param deployKeyVaultForTests bool = true
-
 @minLength(1)
 @maxLength(3)
 param suffix string 
-
-@description('Base name for all resources')
-param baseName string = 'pythonfunc'
-
-@description('Environment name (dev, test, prod)')
-param environment string = 'prod'
-
-@description('Name of the APIM instance')
-param apimName string = 'apim-dev'
 
 @description('Publisher email for APIM')
 param apimPublisherEmail string = 'admin@contoso.com'
@@ -97,6 +94,8 @@ param apimPublisherName string = 'Contoso Admin'
 // Removed unused location parameter for clarity
 
 /* Variables */
+var resourceToken = uniqueString(subscription().id, location, environmentName)
+
 var failoverLocations = {
   eastus: 'westus'
   westus: 'eastus'
@@ -155,13 +154,32 @@ var networksConfiguration = [
   }
 ]
 
-var random = uniqueString(resourceGroup().id, environmentGroupName, azureLocation, baseName, environment)
-var APIMName = 'apim-${random}-${suffix}'
+var APIMName = 'az-apim-${resourceToken}'
 
 /* Resources */
+// Resource Group
+resource resourceGroup 'Microsoft.Resources/resourceGroups@2021-04-01' = {
+  name: resourceGroupName
+  location: location
+  tags: {
+    'azd-env-name': environmentName
+  }
+}
+// Minimal managed identity for azd compatibility (optional, uses user credentials)
+module minimalIdentity 'minimal-identity.bicep' = {
+  name: 'minimal-identity'
+  scope: resourceGroup
+  params: {
+    identityName: 'id-${resourceToken}'
+    location: location
+    environmentName: environmentName
+  }
+}
+
 // Primary and failover VNet and Subnets
 module networks 'vnet-subnet-with-delegation-module.bicep' = [for network in networksConfiguration: {
   name: 'network-${network.category}'
+  scope: resourceGroup
   params: {
     powerPlatformEnvironmentName: environmentGroupName
     networkCategory: network.category
@@ -170,12 +188,15 @@ module networks 'vnet-subnet-with-delegation-module.bicep' = [for network in net
     vnetAddressPrefixes: network.vnetAddressPrefixes
     injectionSnetAddressPrefixes: network.injectionSnetAddressPrefixes
     privateEndpointsSnetAddressPrefixes: network.privateEndpointsSnetAddressPrefixes
+    environmentName: environmentName
+    resourceToken: resourceToken
   }
 }]
 
 // APIM with private endpoint in West Europe VNet (primary)
 module apimWithPrivateEndpoint 'apim-with-private-endpoint.bicep' = {
   name: APIMName
+  scope: resourceGroup
   params: {
     apimName: APIMName
     location: 'westeurope'
@@ -225,6 +246,7 @@ var vnetSubnets = [
 // Enterprise Policy for networkInjection
 module enterprisePolicy 'powerplatform-network-injection-enterprise-policy-module.bicep' = if (deployEnterprisePolicy) {
   name: 'enterprise-policy'
+  scope: resourceGroup
   params: {
     environmentGroupName: environmentGroupName
     location: enterprisePolicyLocation
@@ -234,17 +256,21 @@ module enterprisePolicy 'powerplatform-network-injection-enterprise-policy-modul
 }
 
 /* Outputs */
+output RESOURCE_GROUP_ID string = resourceGroup.id
 output primaryVnetName string = networks[0].outputs.vnetName
 output primarySubnetName string = networks[0].outputs.injectionSnetName
 output failoverVnetName string = networks[1].outputs.vnetName
 output failoverSubnetName string = networks[1].outputs.injectionSnetName
-output enterprisePolicyName string = deployEnterprisePolicy ? enterprisePolicy.outputs.enterprisePolicyName : ''
-output resourceGroup string = resourceGroup().name
+output resourceGroup string = resourceGroup.name
 
 output apimName string = apimWithPrivateEndpoint.outputs.apimName
 output apimId string = apimWithPrivateEndpoint.outputs.apimId
 output apimPrivateEndpointId string = apimWithPrivateEndpoint.outputs.privateEndpointId
 output privateEndpointSubnetId string = networks[0].outputs.privateEndpointSnetId
+
+// Minimal managed identity outputs for azd compatibility
+output AZURE_CLIENT_ID string = minimalIdentity.outputs.clientId
+output AZURE_PRINCIPAL_ID string = minimalIdentity.outputs.principalId
 
 /*
 output petstoreApiName string = apimImportPetstoreApi.outputs.apiName

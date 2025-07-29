@@ -155,9 +155,14 @@ Write-Host "APIM_ID=$($azureInfrastructureDeploymentOutputs.properties.outputs.a
 # delete .env file and create a new one with the updated values
 $envFilePath = "./.env"
 if (Test-Path $envFilePath) {
-    Remove-Item $envFilePath
+    Remove-Item $envFilePath -Force
+    Write-Output "Deleted existing .env file."
+} else {
+    Write-Output ".env file does not exist, creating a new one."
 }
-    $envContent = @"
+# Create the new .env file with the required environment variables
+Write-Output "Creating new .env file with updated values..."
+$envContent = @"
 TENANT_ID=$env:TENANT_ID
 SUBSCRIPTION_ID=$env:SUBSCRIPTION_ID
 AZURE_LOCATION=$env:AZURE_LOCATION
@@ -172,5 +177,4 @@ ENTERPRISE_POLICY_NAME=$($azureInfrastructureDeploymentOutputs.properties.output
 APIM_NAME=$($azureInfrastructureDeploymentOutputs.properties.outputs.apimName.value)
 APIM_ID=$($azureInfrastructureDeploymentOutputs.properties.outputs.apimId.value)
 "@
-Set-Content -Path $envFilePath -Value $envContent
-        
+Set-Content -Path $envFilePath -Value $envContent      

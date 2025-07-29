@@ -1,10 +1,7 @@
-# Requires -Modules Az.Accounts, Az.Resources, Az.KeyVault
+# Prerequisites: Azure CLI (az) must be installed and authenticated
+# This script uses Azure CLI commands instead of Azure PowerShell modules for cross-platform compatibility
 
 Set-StrictMode -Version Latest
-
-param (
-    [string]$EnvFile = ".\.env" # Path to the environment variables file
-)
 
 # Loads environment variables from a .env file into the current process
 function Import-EnvFile {
@@ -21,10 +18,27 @@ function Import-EnvFile {
 
 # Ensures the user is logged in to Azure and sets the correct subscription
 function Ensure-AzLogin {
-    if (-not (az account show 2>$null)) {
-        & az login --tenant $env:TENANT_ID | Out-Null
+    # Check if already logged in
+    $accountInfo = az account show 2>$null
+    if (-not $accountInfo) {
+        Write-Output "Azure CLI not logged in. Attempting to log in..."
+        if ($env:TENANT_ID) {
+            az login --tenant $env:TENANT_ID | Out-Null
+        } else {
+            az login | Out-Null
+        }
     }
-    & az account set --subscription $env:SUBSCRIPTION_ID
+    
+    # Set subscription if provided
+    if ($env:SUBSCRIPTION_ID) {
+        Write-Output "Setting Azure subscription to: $env:SUBSCRIPTION_ID"
+        az account set --subscription $env:SUBSCRIPTION_ID
+        if ($LASTEXITCODE -ne 0) {
+            throw "Failed to set Azure subscription. Please check your subscription ID."
+        }
+    } else {
+        throw "SUBSCRIPTION_ID environment variable is not set."
+    }
 }
 
 # Registers the Microsoft.PowerPlatform resource provider if not already registered
@@ -150,21 +164,47 @@ function Wait-ForOperation {
 # --- Main Script ---
 
 # Step 1: Import environment variables from .env file
+$EnvFile = "./.env"
 Import-EnvFile -Path $EnvFile
+
+# Validate required environment variables
+$requiredVars = @('TENANT_ID', 'SUBSCRIPTION_ID', 'RESOURCE_GROUP', 'ENTERPRISE_POLICY_NAME', 'POWER_PLATFORM_ENVIRONMENT_NAME')
+foreach ($var in $requiredVars) {
+    if (-not (Get-Item -Path "env:$var" -ErrorAction SilentlyContinue)) {
+        throw "Required environment variable '$var' is not set. Please check your .env file."
+    }
+}
+
+Write-Output "Environment variables loaded successfully:"
+Write-Output "  TENANT_ID: $env:TENANT_ID"
+Write-Output "  SUBSCRIPTION_ID: $env:SUBSCRIPTION_ID"
+Write-Output "  RESOURCE_GROUP: $env:RESOURCE_GROUP"
+Write-Output "  ENTERPRISE_POLICY_NAME: $env:ENTERPRISE_POLICY_NAME"
+Write-Output "  POWER_PLATFORM_ENVIRONMENT_NAME: $env:POWER_PLATFORM_ENVIRONMENT_NAME"
 
 # Step 2: Ensure Azure login and set the correct subscription
 Ensure-AzLogin
 
-# Step 3: Set execution policy for the current process (bypass restrictions)
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
+# Step 3: Set execution policy for the current process (bypass restrictions) - Windows only
+if ($IsLinux -or $IsMacOS) {
+    Write-Output "Running on non-Windows platform. Skipping Set-ExecutionPolicy."
+} else {
+    # Set the execution policy to allow script execution (Windows only)
+    Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
+}
 
 
-# Step 4: Extract enterprise policy details 
+# Step 4: Extract enterprise policy details using Azure CLI
 #$environmentId = (Get-AdminPowerAppEnvironment "$env:POWER_PLATFORM_ENVIRONMENT_NAME").EnvironmentName
 #$enterprisePolicyId = (Get-AzResource -Name "$env:ENTERPRISE_POLICY_NAME" -ResourceGroupName "$env:RESOURCE_GROUP").ResourceId
-$enterprisePolicyName = (Get-AzResource -Name "$env:ENTERPRISE_POLICY_NAME" -ResourceGroupName "$env:RESOURCE_GROUP").Name
-#$policyArmId = "/subscriptions/$env:SUBSCRIPTION_ID/resourceGroups/$resourceGroupName/providers/Microsoft.PowerPlatform/enterprisePolicies/$enterprisePolicyName"
-$policyArmId = (Get-AzResource -Name "$env:ENTERPRISE_POLICY_NAME" -ResourceGroupName "$env:RESOURCE_GROUP").ResourceId
+
+# Get enterprise policy details using Azure CLI
+$enterprisePolicyJson = az resource show --name "$env:ENTERPRISE_POLICY_NAME" --resource-group "$env:RESOURCE_GROUP" --resource-type "Microsoft.PowerPlatform/enterprisePolicies" --output json | ConvertFrom-Json
+$enterprisePolicyName = $enterprisePolicyJson.name
+$policyArmId = $enterprisePolicyJson.id
+
+Write-Output "Enterprise Policy Name: $enterprisePolicyName"
+Write-Output "Enterprise Policy ARM ID: $policyArmId"
 
 # Step 5: Get an access token for the Power Platform Admin API
 $powerPlatformAdminApiToken = Get-PowerPlatformAccessToken
@@ -179,7 +219,28 @@ $systemId = az resource show --ids $policyArmId --query "properties.systemId" -o
 $linkResult = Link-EnterprisePolicyToEnvironment -AccessToken $powerPlatformAdminApiToken -EnvironmentId $powerPlatformEnvironmentId -SystemId $systemId
 
 # Step 9: Wait for link operation to complete
-$operationLink = $linkResult.Headers.'operation-location'
+$operationLocationHeader = $linkResult.Headers.'operation-location'
+if ($operationLocationHeader -is [array]) {
+    $operationLink = $operationLocationHeader[0]
+} else {
+    $operationLink = $operationLocationHeader
+}
+
+Write-Output "Operation link: $operationLink"
+
+# Validate the operation link
+if (-not $operationLink -or $operationLink -eq "") {
+    throw "No operation-location header found in the link response. The linking operation may have failed."
+}
+
+# Ensure it's a valid URI string
+try {
+    $uri = [System.Uri]::new($operationLink)
+    Write-Output "Polling operation status at: $($uri.AbsoluteUri)"
+} catch {
+    throw "Invalid operation link URI: $operationLink. Error: $($_.Exception.Message)"
+}
+
 $pollInterval = 10 # seconds
 $run = $true
 while ($run) {

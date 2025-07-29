@@ -59,6 +59,21 @@ If you prefer to set up the environment manually, ensure you have:
 ## Recent Updates & Fixes
 
 ### Latest Changes (July 2025)
+- ✅ **New Cleanup Script**: Added comprehensive `3-Cleanup.ps1` for safe removal of all deployed resources
+  - Interactive cleanup with confirmation prompts for safety
+  - Support for automated cleanup with `-Force` parameter
+  - Selective cleanup options (`-SkipPowerPlatform`, `-KeepResourceGroup`)
+  - Robust error handling and detailed operation reporting
+  - Power Platform enterprise policy unlinking with operation monitoring
+  - Azure infrastructure cleanup using `azd down` with fallback to direct resource deletion
+- ✅ **Enhanced Script Documentation**: Added comprehensive comment-based help to all PowerShell scripts
+  - Complete `.SYNOPSIS`, `.DESCRIPTION`, `.PARAMETER`, `.EXAMPLE`, `.INPUTS`, `.OUTPUTS`, `.NOTES`, and `.LINK` sections
+  - Detailed inline comments explaining complex operations and cross-platform considerations
+  - Professional-grade documentation following PowerShell best practices
+- ✅ **Improved Code Maintainability**: Enhanced comments throughout all scripts for better understanding
+  - Clear step-by-step explanations in main script execution flow
+  - Function-level documentation with purpose and parameter descriptions
+  - Context-aware comments for Azure CLI operations and API interactions
 - ✅ **Fixed Dev Container Configuration**: Added PowerShell Core support to `.devcontainer/devcontainer.json`
 - ✅ **Cross-Platform Compatibility**: Updated PowerShell scripts for Linux/Unix environments
 - ✅ **Azure CLI Integration**: Enhanced authentication checks and error handling
@@ -69,10 +84,69 @@ If you prefer to set up the environment manually, ensure you have:
 - ✅ **azd Integration**: Updated PowerShell scripts to work with Azure Developer CLI deployment model
 - ✅ **Network Configuration**: Resolved subnet IP range validation issues
 
+### PowerShell Script Improvements (Latest)
+- ✅ **1-InfraCreation.ps1 Enhancements**:
+  - Comprehensive comment-based help documentation with detailed examples
+  - Cross-platform Set-ExecutionPolicy handling with automatic platform detection
+  - Enhanced Azure CLI authentication validation with clear error messages
+  - Fixed azd command syntax and output parsing with robust error handling
+  - Improved error handling with meaningful exit codes and user guidance
+  - Unix-style file path compatibility (`./` instead of `.\`)
+  - Detailed inline comments explaining environment variable parsing, azd integration, and APIM configuration
+  - Professional documentation including prerequisites, version info, and Microsoft Learn links
+
+- ✅ **2-SubnetInjectionSetup.ps1 Enhancements**:
+  - Complete script restructure with comprehensive help documentation
+  - Removed Azure PowerShell module dependencies for full cross-platform compatibility
+  - Replaced `Get-AzResource` with Azure CLI equivalents using `az resource show`
+  - Fixed missing `$EnvFile` parameter definition with proper validation
+  - Enhanced environment variable validation with detailed status output
+  - Fixed array-to-URI conversion in operation polling with robust header handling
+  - Added comprehensive error handling for all API calls with status code validation
+  - Cross-platform execution policy handling with automatic OS detection
+  - Modular function design with detailed comments and purpose explanations
+  - Enhanced operation polling with user-friendly status messages and emojis
+
+### Script Help Documentation
+
+Both PowerShell scripts now include comprehensive comment-based help documentation. You can access detailed information about each script using PowerShell's built-in help system:
+
+#### Getting Help
+```powershell
+# View basic help for infrastructure creation script
+Get-Help ./1-InfraCreation.ps1
+
+# View detailed help with examples
+Get-Help ./1-InfraCreation.ps1 -Full
+
+# View help for subnet injection setup script
+Get-Help ./2-SubnetInjectionSetup.ps1 -Detailed
+
+# Show parameter information
+Get-Help ./1-InfraCreation.ps1 -Parameter EnvFile
+```
+
+#### Documentation Features
+- **Comprehensive Descriptions**: Detailed explanations of what each script accomplishes
+- **Parameter Documentation**: Complete parameter descriptions with validation requirements
+- **Multiple Examples**: Practical usage examples for different scenarios
+- **Prerequisites**: Clear listing of required tools and permissions
+- **Cross-Platform Notes**: Platform-specific guidance for Windows, Linux, and macOS
+- **API References**: Links to relevant Microsoft Learn documentation
+- **Version Information**: Script version and modification history
+
+#### Script Quality Features
+- **Inline Comments**: Detailed explanations of complex operations and logic
+- **Function Documentation**: Each function includes purpose and parameter descriptions
+- **Error Context**: Meaningful error messages with troubleshooting guidance
+- **Process Flow**: Step-by-step comments explaining the execution sequence
+- **Best Practices**: Following PowerShell and Azure CLI best practices throughout
+
 ### Breaking Changes
 - **PowerShell Execution**: Scripts now use `pwsh` (PowerShell Core) instead of Windows PowerShell
 - **azd Deployment**: Infrastructure deployment now uses `azd up` instead of direct `az deployment` commands
 - **Parameter Structure**: Simplified parameter files to match Bicep template definitions
+- **Azure CLI Only**: Scripts now use Azure CLI exclusively, no Azure PowerShell modules required
 
 ## Environment Configuration
 
@@ -138,7 +212,7 @@ This script performs the following actions:
 Run the subnet injection setup script:
 
 ```powershell
-.\2-SubnetInjectionSetup.ps1
+pwsh ./2-SubnetInjectionSetup.ps1
 ```
 
 This script performs the following actions:
@@ -157,6 +231,60 @@ This script performs the following actions:
 - **Token Management**: Automatic token refresh for long-running operations
 - **Operation Polling**: Robust polling mechanism with configurable intervals and retries
 - **Strict Mode**: Uses PowerShell strict mode for better error detection
+
+### Step 3: Environment Cleanup (Optional)
+When you need to remove all deployed resources, use the cleanup script:
+
+```powershell
+pwsh ./3-Cleanup.ps1
+```
+
+This script safely removes all infrastructure and configurations:
+
+#### Interactive Cleanup (Recommended)
+```powershell
+# Standard cleanup with confirmation prompts
+pwsh ./3-Cleanup.ps1
+
+# Use custom environment file
+pwsh ./3-Cleanup.ps1 -EnvFile "./config/production.env"
+
+# Keep the resource group but remove all resources
+pwsh ./3-Cleanup.ps1 -KeepResourceGroup
+
+# Skip Power Platform unlinking (Azure resources only)
+pwsh ./3-Cleanup.ps1 -SkipPowerPlatform
+```
+
+#### Automated Cleanup
+```powershell
+# Automated cleanup without confirmations (use with caution)
+pwsh ./3-Cleanup.ps1 -Force
+
+# Combined options for scripted scenarios
+pwsh ./3-Cleanup.ps1 -Force -SkipPowerPlatform -KeepResourceGroup
+```
+
+#### Cleanup Process
+1. **Power Platform Configuration**: Unlinks enterprise policy from environment
+2. **Azure Infrastructure**: Removes all Azure resources using `azd down` or direct resource group deletion
+3. **Environment File**: Optionally removes the configuration file
+4. **Comprehensive Reporting**: Detailed summary of completed operations and any issues
+
+#### Safety Features
+- **Interactive Confirmations**: Multiple confirmation prompts for destructive operations
+- **Resource Validation**: Checks for resource existence before attempting deletion
+- **Error Handling**: Graceful handling of missing resources and API failures
+- **Detailed Logging**: Comprehensive status reporting throughout the cleanup process
+- **Rollback Protection**: Safe failure modes that prevent partial cleanup states
+
+#### Parameters
+- **`-Force`**: Skip all confirmation prompts (use for automation)
+- **`-SkipPowerPlatform`**: Keep Power Platform configuration, remove only Azure resources
+- **`-KeepResourceGroup`**: Preserve the resource group while removing individual resources
+- **`-EnvFile`**: Specify custom environment file path
+
+**⚠️ Warning**: The cleanup script permanently deletes Azure resources and cannot be undone. Always ensure you have proper backups if needed.
 
 ## API Management - Importing and Publishing APIs
 
@@ -451,7 +579,7 @@ The deployment follows a specific sequence to handle Azure resource dependencies
 
 #### 1. **Set-ExecutionPolicy Error on Linux**
 **Error**: `Operation is not supported on this platform`
-**Solution**: ✅ Fixed - Script now detects Linux/macOS and skips Windows-specific commands
+**Solution**: ✅ Fixed - Both scripts now detect Linux/macOS and skip Windows-specific commands
 
 #### 2. **Azure CLI Authentication Issues**
 **Error**: `Please run 'az login' to setup account`
@@ -468,6 +596,18 @@ The deployment follows a specific sequence to handle Azure resource dependencies
 #### 5. **Parameter Mismatch Errors**
 **Error**: Deployment fails with undefined parameter references
 **Solution**: ✅ Fixed - Cleaned up `main.parameters.json` to match `main.bicep` parameters exactly
+
+#### 6. **Get-AzResource Not Recognized**
+**Error**: `The term 'Get-AzResource' is not recognized as a name of a cmdlet`
+**Solution**: ✅ Fixed - Replaced all Azure PowerShell commands with Azure CLI equivalents
+
+#### 7. **Missing Environment Variable**
+**Error**: `The variable '$EnvFile' cannot be retrieved because it has not been set`
+**Solution**: ✅ Fixed - Added proper variable definition and environment validation
+
+#### 8. **Array to URI Conversion Error**
+**Error**: `Cannot convert 'System.String[]' to the type 'System.Uri'`
+**Solution**: ✅ Fixed - Added array handling for HTTP headers and URI validation
 
 ### Legacy Issues
 
@@ -527,6 +667,7 @@ After deployment, verify:
 ```
 ├── 1-InfraCreation.ps1              # Main infrastructure deployment script
 ├── 2-SubnetInjectionSetup.ps1       # Enterprise policy linking script
+├── 3-Cleanup.ps1                    # Complete cleanup and removal script
 ├── .env                             # Environment variables
 ├── infra/                           # Bicep templates
 │   ├── main.bicep
@@ -547,12 +688,19 @@ After deployment, verify:
 ## Notes
 
 ### Current Implementation (July 2025)
+- **Enhanced Documentation**: Both PowerShell scripts feature comprehensive comment-based help following Microsoft standards
+- **Enterprise-Grade Comments**: Detailed inline documentation explaining complex operations, API interactions, and cross-platform considerations
+- **Professional Script Structure**: Modular functions with clear purpose documentation and parameter validation
+- **Cross-Platform Scripting**: Full PowerShell Core support with automatic platform detection and appropriate command execution
 - The infrastructure uses a simplified APIM deployment approach with private endpoints but without VNet integration
 - Dynamic suffix using `uniqueString()` function ensures unique resource names across deployments
 - Cross-platform PowerShell Core support enables development on Windows, Linux, and macOS
 - Azure Developer CLI (azd) integration provides streamlined deployment experience
 - The solution supports both primary and secondary regions for high availability
 - Environment variables are automatically updated after successful deployment
+- Both PowerShell scripts now use Azure CLI exclusively (no Azure PowerShell modules required)
+- Enhanced error handling and validation throughout all deployment scripts
+- Robust HTTP header handling for Power Platform API operations
 - The `2-SubnetInjectionSetup.ps1` script uses modular functions for better maintainability and error handling
 - Enterprise policy linking is handled separately from infrastructure deployment for better separation of concerns
 
@@ -563,8 +711,39 @@ After deployment, verify:
 - **Azure Bicep**: Infrastructure as Code with IntelliSense support
 - **azd Integration**: Simplified deployment workflows
 
+### Script Execution Flow (Enhanced)
+All PowerShell scripts now follow a robust execution pattern:
+
+**1-InfraCreation.ps1**:
+1. ✅ Cross-platform environment detection
+2. ✅ Environment variable loading with Unix path compatibility
+3. ✅ Azure CLI authentication validation
+4. ✅ Microsoft.PowerPlatform provider registration
+5. ✅ Azure Developer CLI deployment (`azd up`)
+6. ✅ Output parsing and environment file updates
+7. ✅ APIM private endpoint configuration
+
+**2-SubnetInjectionSetup.ps1**:
+1. ✅ Environment variable validation with detailed output
+2. ✅ Azure CLI authentication with subscription context
+3. ✅ Enterprise policy resource discovery via Azure CLI
+4. ✅ Power Platform API authentication and environment lookup
+5. ✅ Enterprise policy linking with robust operation polling
+6. ✅ Array-safe HTTP header handling for operation status
+
+**3-Cleanup.ps1** (New):
+1. ✅ Cross-platform environment detection and validation
+2. ✅ Environment variable validation with flexible requirements
+3. ✅ Azure CLI authentication with subscription verification
+4. ✅ Interactive confirmation prompts with safety checks
+5. ✅ Power Platform enterprise policy unlinking with operation monitoring
+6. ✅ Azure infrastructure cleanup using `azd down` with fallback options
+7. ✅ Optional environment file cleanup
+8. ✅ Comprehensive operation summary and error reporting
+
 ### Compatibility Notes
 - **PowerShell**: Requires PowerShell Core 7+ (`pwsh`) for cross-platform support
 - **Azure CLI**: Must be logged in (`az login`) before running deployment scripts
 - **azd**: Uses Azure Developer CLI for deployment orchestration
 - **Bicep**: Latest Bicep CLI extension recommended for template validation
+- **Operating Systems**: Windows, Linux, and macOS fully supported

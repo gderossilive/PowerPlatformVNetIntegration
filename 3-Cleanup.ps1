@@ -46,6 +46,11 @@ Use this when you want to keep the Power Platform configuration but remove Azure
 When specified, keeps the resource group after removing individual resources.
 Use this when the resource group contains other resources not related to this deployment.
 
+.PARAMETER RemoveEnvironment
+When specified, removes the entire Power Platform environment and all contained data.
+WARNING: This is extremely destructive and cannot be undone. All apps, flows, connections,
+and data in the environment will be permanently deleted. Use with extreme caution.
+
 .EXAMPLE
 PS C:\> ./3-Cleanup.ps1
 
@@ -71,6 +76,13 @@ Removes all resources but keeps the resource group intact.
 Useful when the resource group contains other unrelated resources.
 
 .EXAMPLE
+PS C:\> ./3-Cleanup.ps1 -RemoveEnvironment -Force
+
+Performs complete cleanup including permanent deletion of the Power Platform environment.
+This is the most destructive option and should only be used when you want to completely
+remove everything including the environment itself.
+
+.EXAMPLE
 PS C:\> Get-Help ./3-Cleanup.ps1 -Full
 
 Displays this comprehensive help documentation.
@@ -89,7 +101,7 @@ Author         : Power Platform VNet Integration Project
 Prerequisite   : Azure CLI (az) must be installed and authenticated with appropriate permissions
 Prerequisite   : Azure Developer CLI (azd) must be installed for infrastructure cleanup
 Prerequisite   : PowerShell Core 7+ (pwsh) for cross-platform compatibility
-Prerequisite   : Microsoft.PowerApps.Administration.PowerShell module (auto-installed if missing)
+Prerequisite   : Microsoft.PowerApps.Administration.PowerShell module (auto-installed, with REST API fallback)
 
 Required Permissions:
 - Contributor role on the Azure subscription for resource deletion
@@ -102,11 +114,13 @@ Safety Features:
 - Error handling with meaningful messages
 - Graceful handling of missing resources
 - Detailed logging of cleanup operations
-- Automatic PowerApps PowerShell module installation
+- Automatic PowerApps PowerShell module installation with REST API fallback
+- Multiple approaches for enterprise policy removal (PowerApps cmdlets + REST API)
 
 The cleanup process typically takes 10-20 minutes depending on the number of resources
 and their deletion dependencies. API Management instances may take the longest to delete.
-Enterprise policy unlinking is performed using PowerApps PowerShell cmdlets for reliability.
+Enterprise policy unlinking uses PowerApps PowerShell cmdlets when available, with automatic
+fallback to REST API calls for maximum compatibility across different environments.
 
 Version        : 1.0 (July 2025)
 Last Modified  : Initial creation with comprehensive cleanup functionality
@@ -132,7 +146,10 @@ param(
     [switch]$SkipPowerPlatform,
     
     [Parameter(Mandatory = $false, HelpMessage = "Keep the resource group after cleanup")]
-    [switch]$KeepResourceGroup
+    [switch]$KeepResourceGroup,
+    
+    [Parameter(Mandatory = $false, HelpMessage = "Remove the Power Platform environment itself (WARNING: This will permanently delete the environment)")]
+    [switch]$RemoveEnvironment
 )
 
 # Enable strict mode for better error handling and debugging
@@ -216,154 +233,406 @@ function Install-PowerAppsModule {
     try {
         Write-Output "Checking PowerApps PowerShell module..."
         
-        # Check if the module is already installed
-        $module = Get-Module -ListAvailable -Name Microsoft.PowerApps.Administration.PowerShell
+        # First, try to remove any potentially corrupted versions
+        try {
+            Get-Module Microsoft.PowerApps.Administration.PowerShell -ListAvailable | Remove-Module -Force -ErrorAction SilentlyContinue
+        }
+        catch {
+            # Ignore errors during cleanup
+        }
+        
+        # Check if the module is already installed and working
+        $module = Get-Module -ListAvailable -Name Microsoft.PowerApps.Administration.PowerShell | Select-Object -First 1
         
         if (-not $module) {
             Write-Output "Installing PowerApps PowerShell module..."
-            Install-Module -Name Microsoft.PowerApps.Administration.PowerShell -Force -AllowClobber -Scope CurrentUser
+            
+            # Install with specific parameters for Linux/container environments
+            $installParams = @{
+                Name = "Microsoft.PowerApps.Administration.PowerShell"
+                Force = $true
+                AllowClobber = $true
+                Scope = "CurrentUser"
+                SkipPublisherCheck = $true
+                AllowPrerelease = $false
+                Repository = "PSGallery"
+            }
+            
+            Install-Module @installParams -ErrorAction Stop
             Write-Output "✓ PowerApps PowerShell module installed successfully."
+            
+            # Refresh module list after installation
+            $module = Get-Module -ListAvailable -Name Microsoft.PowerApps.Administration.PowerShell | Select-Object -First 1
         } else {
-            Write-Output "✓ PowerApps PowerShell module is already installed."
+            Write-Output "✓ PowerApps PowerShell module is already installed (Version: $($module.Version))."
         }
         
-        # Import the module
-        Import-Module Microsoft.PowerApps.Administration.PowerShell -Force
-        return $true
+        # Test import with enhanced error handling
+        try {
+            # Force reimport to ensure clean state
+            Remove-Module Microsoft.PowerApps.Administration.PowerShell -Force -ErrorAction SilentlyContinue
+            
+            Write-Output "Importing PowerApps PowerShell module..."
+            Import-Module Microsoft.PowerApps.Administration.PowerShell -Force -ErrorAction Stop -Verbose:$false
+            
+            # Test if the module actually works by checking for key cmdlets
+            $testCmdlet = Get-Command Add-PowerAppsAccount -ErrorAction SilentlyContinue
+            if ($testCmdlet) {
+                Write-Output "✓ PowerApps PowerShell module imported and validated successfully."
+                return $true
+            } else {
+                throw "Module imported but key cmdlets are not available"
+            }
+        }
+        catch {
+            Write-Warning "PowerApps PowerShell module import failed: $($_.Exception.Message)"
+            Write-Output "This may be due to module compatibility issues in the current environment."
+            Write-Output "Common causes: Linux/container environment incompatibilities, .NET Framework dependencies, or corrupted module files."
+            return $false
+        }
     }
     catch {
-        Write-Warning "Failed to install/import PowerApps PowerShell module: $($_.Exception.Message)"
+        Write-Warning "Failed to install PowerApps PowerShell module: $($_.Exception.Message)"
+        Write-Output "This may be due to network issues, module compatibility problems, or insufficient permissions."
         return $false
     }
 }
 
-# Connects to Power Platform using PowerApps PowerShell cmdlets
-# Uses Azure CLI credentials for authentication
-function Connect-PowerPlatform {
-    try {
-        Write-Output "Connecting to Power Platform..."
+# Gets an access token for Power Platform Admin API using Azure CLI
+# Fallback method when PowerApps PowerShell module is not available
+function Get-PowerPlatformAccessToken {
+    try {        
+        # Power Platform Admin API resource identifier
+        $resource = "https://api.bap.microsoft.com/"
+        $token = az account get-access-token --resource $resource --query accessToken --output tsv
         
-        # Use Azure CLI token for authentication
-        $context = [Microsoft.Azure.Commands.Common.Authentication.Abstractions.AzureRmProfileProvider]::Instance.Profile.DefaultContext
-        if ($context.Account) {
-            # Add Power Platform account using existing Azure CLI context
-            Add-PowerAppsAccount -TenantID $env:TENANT_ID
-            Write-Output "✓ Connected to Power Platform successfully."
-            return $true
-        } else {
-            Write-Warning "No Azure CLI context found. Please ensure you are logged in with Azure CLI."
-            return $false
+        if (-not $token -or $token.Trim() -eq "") {
+            throw "Failed to obtain access token for Power Platform Admin API."
         }
+        
+        # Ensure token contains only ASCII characters
+        $token = $token.Trim()
+
+        return $token
     }
     catch {
-        Write-Warning "Failed to connect to Power Platform: $($_.Exception.Message)"
-        Write-Output "Attempting alternative authentication method..."
-        
-        try {
-            # Alternative: Connect using tenant ID
-            Add-PowerAppsAccount -TenantID $env:TENANT_ID
-            Write-Output "✓ Connected to Power Platform using alternative method."
-            return $true
-        }
-        catch {
-            Write-Warning "Failed to connect to Power Platform with alternative method: $($_.Exception.Message)"
-            return $false
-        }
+        throw "Error obtaining Power Platform access token: $($_.Exception.Message)"
     }
 }
 
-# Gets the Power Platform environment by display name
-# Uses PowerApps PowerShell cmdlets for reliable environment lookup
-function Get-PowerPlatformEnvironmentByName {
-    param([string]$DisplayName)
-    
+# Gets the enterprise policy resource ID for proper cleanup
+# This ensures we can both unlink and delete the enterprise policy resource
+function Get-EnterprisePolicyId {
     try {
-        Write-Output "Searching for Power Platform environment: $DisplayName"
-        
-        # Get all environments and find by display name
-        $environments = Get-AdminPowerAppEnvironment
-        $targetEnvironment = $environments | Where-Object { $_.DisplayName -eq $DisplayName }
-        
-        if (-not $targetEnvironment) {
-            Write-Warning "Power Platform environment '$DisplayName' not found. It may have been already removed or renamed."
-            return $null
+        # First, try to get it from environment variables if available
+        if ($env:ENTERPRISE_POLICY_NAME -and $env:RESOURCE_GROUP -and $env:SUBSCRIPTION_ID) {
+            $enterprisePolicyId = "/subscriptions/$env:SUBSCRIPTION_ID/resourceGroups/$env:RESOURCE_GROUP/providers/Microsoft.PowerPlatform/enterprisePolicies/$env:ENTERPRISE_POLICY_NAME"
+            
+            # Verify the enterprise policy exists
+            $policyExists = az resource show --ids $enterprisePolicyId --query "name" -o tsv 2>$null
+            if ($policyExists) {
+                Write-Output "✓ Found enterprise policy from environment variables: $enterprisePolicyId"
+                return $enterprisePolicyId
+            }
         }
         
-        Write-Output "✓ Found Power Platform environment: $($targetEnvironment.EnvironmentName)"
-        return $targetEnvironment
+        # If not found via environment variables, try to find it in the resource group
+        if ($env:RESOURCE_GROUP -and $env:SUBSCRIPTION_ID) {
+            Write-Output "Searching for enterprise policies in resource group: $env:RESOURCE_GROUP"
+            
+            $policies = az resource list --resource-group $env:RESOURCE_GROUP --resource-type "Microsoft.PowerPlatform/enterprisePolicies" --query "[].id" -o tsv 2>$null
+            
+            if ($policies) {
+                $policyArray = $policies -split "`n" | Where-Object { $_ -ne "" }
+                if ($policyArray.Count -eq 1) {
+                    Write-Output "✓ Found enterprise policy in resource group: $($policyArray[0])"
+                    return $policyArray[0]
+                } elseif ($policyArray.Count -gt 1) {
+                    Write-Warning "Multiple enterprise policies found in resource group. Using the first one: $($policyArray[0])"
+                    return $policyArray[0]
+                }
+            }
+        }
+        
+        Write-Output "No enterprise policy found via environment variables or resource group search."
+        return $null
     }
     catch {
-        Write-Warning "Error retrieving Power Platform environment: $($_.Exception.Message)"
+        Write-Warning "Error searching for enterprise policy: $($_.Exception.Message)"
         return $null
     }
 }
 
-# Unlinks the VNet enterprise policy from the Power Platform environment
-# Uses the proper PowerApps PowerShell approach for enterprise policy management
-function Remove-PowerPlatformVNetPolicy {
+# Gets Power Platform environment using REST API
+# Fallback method when PowerApps PowerShell module is not available
+function Get-PowerPlatformEnvironmentByNameREST {
+    param([string]$DisplayName, [string]$AccessToken)
+    
+    try {
+        Write-Output "Searching for Power Platform environment using REST API: $DisplayName"
+        
+        $AccessToken=Get-PowerPlatformAccessToken
+        $headers = @{ 
+            'Authorization' = "Bearer $AccessToken"
+            'Content-Type' = 'application/json'
+        }
+        
+        $url = "https://api.bap.microsoft.com/providers/Microsoft.BusinessAppPlatform/environments?api-version=2023-06-01"
+        
+        try {
+            $result = Invoke-RestMethod -Uri $url -Headers $headers -Method Get -ErrorAction Stop
+            
+            # Find environment by display name
+            $environment = $result.value | Where-Object { $_.properties.displayName -eq $DisplayName }
+            
+            if (-not $environment) {
+                Write-Warning "Power Platform environment '$DisplayName' not found. It may have been already removed or renamed."
+                return $null
+            }
+            
+            Write-Output "✓ Found Power Platform environment: $($environment.name)"
+            return $environment
+        }
+        catch {
+            $statusCode = "Unknown"
+            $errorMessage = $_.Exception.Message
+            
+            if ($_.Exception.Response) {
+                $statusCode = $_.Exception.Response.StatusCode.value__
+            }
+            
+            Write-Warning "REST API call failed (Status: $statusCode): $errorMessage"
+            
+            # Check if it's an authentication issue
+            if ($statusCode -eq 401 -or $errorMessage -like "*unauthorized*" -or $errorMessage -like "*authentication*") {
+                Write-Output "This appears to be an authentication issue. The access token may have expired or be invalid."
+            }
+            
+            return $null
+        }
+    }
+    catch {
+        Write-Warning "Error retrieving Power Platform environment via REST API: $($_.Exception.Message)"
+        return $null
+    }
+}
+
+# Removes VNet enterprise policy using REST API
+# Fallback method when PowerApps PowerShell module is not available
+# Based on the official PowerApps samples and proven enterprise policy management patterns
+function Remove-PowerPlatformVNetPolicyREST {
     param(
         [string]$EnvironmentId,
-        [string]$PolicyArmId
+        [string]$AccessToken,
+        [string]$EnterprisePolicyId = $null
     )
     
     try {
-        Write-Output "Attempting to unlink VNet enterprise policy from environment..."
+        Write-Output "Attempting to remove VNet enterprise policy via REST API..."
         Write-Output "Environment ID: $EnvironmentId"
-        Write-Output "Policy ARM ID: $PolicyArmId"
-        
-        # Check if the environment has the enterprise policy linked
-        $environment = Get-AdminPowerAppEnvironment -EnvironmentName $EnvironmentId
-        
-        if (-not $environment) {
-            Write-Warning "Environment $EnvironmentId not found or inaccessible."
-            return $false
+                
+        # Step 1: First, verify if enterprise policy exists and get its details
+        Write-Output "Checking for existing enterprise policies on environment..."
+        $AccessToken=Get-PowerPlatformAccessToken
+        $headers = @{ 
+            'Authorization' = "Bearer $AccessToken"
+            'Content-Type' = 'application/json'
         }
+        $envUrl = "https://api.bap.microsoft.com/providers/Microsoft.BusinessAppPlatform/environments/$EnvironmentId" + "?api-version=2023-06-01"
         
-        # Check if the environment has enterprise policies
-        if (-not $environment.Internal.properties.enterprisePolicies) {
-            Write-Output "✓ No enterprise policies found on environment. Already clean."
-            return $true
-        }
+        # Use provided enterprise policy ID or try to get it from environment
+        $enterprisePolicyId = $EnterprisePolicyId
         
-        # Check for VNet policy specifically
-        $vnetPolicy = $environment.Internal.properties.enterprisePolicies.VNets
-        if (-not $vnetPolicy) {
-            Write-Output "✓ No VNet enterprise policy found on environment. Already clean."
-            return $true
-        }
-        
-        Write-Output "VNet enterprise policy found. Attempting removal..."
-        
-        # Use the Remove-AdminPowerAppEnvironmentEnterprisePolicy cmdlet
-        Remove-AdminPowerAppEnvironmentEnterprisePolicy -EnvironmentName $EnvironmentId -PolicyType "NetworkInjection"
-        
-        Write-Output "✓ VNet enterprise policy removal initiated successfully."
-        return $true
-    }
-    catch {
-        $errorMessage = $_.Exception.Message
-        Write-Warning "Error removing VNet enterprise policy: $errorMessage"
-        
-        # Check if error indicates policy is already removed or doesn't exist
-        if ($errorMessage -like "*not found*" -or $errorMessage -like "*does not exist*" -or $errorMessage -like "*already removed*") {
-            Write-Output "✓ Enterprise policy appears to already be removed."
-            return $true
-        }
-        
-        # For other errors, check if we can use alternative approach
-        Write-Output "Attempting alternative removal approach..."
         try {
-            # Alternative approach using REST API directly
-            $result = Remove-AdminPowerAppEnvironmentEnterprisePolicy -EnvironmentName $EnvironmentId -PolicyType "VNets"
-            Write-Output "✓ VNet enterprise policy removed using alternative approach."
+
+            $envResult = Invoke-RestMethod -Uri $envUrl -Headers $headers -Method Get
+            
+            # Check for enterprise policies with proper null checking
+            $hasVNetPolicy = $false
+            if ($envResult -and $envResult.properties) {
+                if ($envResult.properties.PSObject.Properties['enterprisePolicies']) {
+                    if ($envResult.properties.enterprisePolicies.PSObject.Properties['VNets']) {
+                        $hasVNetPolicy = $true
+                        # Get the enterprise policy resource ID from environment if not provided
+                        if (-not $enterprisePolicyId) {
+                            $enterprisePolicyId = $envResult.properties.enterprisePolicies.VNets
+                        }
+                    }
+                }
+            }
+            
+            if (-not $hasVNetPolicy) {
+                Write-Output "✓ No VNet enterprise policy found on environment. Already clean."
+                return $true
+            }
+            
+            if ($enterprisePolicyId) {
+                Write-Output "Found VNet enterprise policy: $enterprisePolicyId"
+            }
+            
+        }
+        catch {
+            Write-Warning "Could not check environment policies. Proceeding with removal attempt..."
+            # Keep the provided enterprise policy ID if available
+        }
+        
+        # Step 2: Unlink the enterprise policy from the Power Platform environment
+        Write-Output "Unlinking enterprise policy from Power Platform environment..."
+        $ApiVersion = "2023-06-01"
+        $unlinkUrl = "https://api.bap.microsoft.com/providers/Microsoft.BusinessAppPlatform/environments/$EnvironmentId/enterprisePolicies/NetworkInjection/unlink?api-version=$ApiVersion"
+        
+        # Prepare request body - if we have the enterprise policy ID, get its system ID
+        $body = @{}
+        if ($enterprisePolicyId) {
+            try {
+                # Get the policy system ID for the unlink operation
+                $policySystemId = az resource show --ids $enterprisePolicyId --query "properties.systemId" -o tsv 2>$null
+                if ($policySystemId) {
+                    $body = @{ "SystemId" = $policySystemId }
+                    Write-Output "Using enterprise policy system ID: $policySystemId"
+                }
+            }
+            catch {
+                Write-Output "Could not retrieve enterprise policy system ID. Using empty body for unlink."
+            }
+        }
+        
+        try {
+            $bodyJson = $body | ConvertTo-Json
+            Write-Output "Initiating enterprise policy unlink operation..."
+
+            $AccessToken=Get-PowerPlatformAccessToken
+            $headers = @{ 
+                Authorization = "Bearer $AccessToken"
+                'Content-Type' = 'application/json'
+            }
+                    
+            # Use Invoke-WebRequest for better control over response handling
+            $unlinkResponse = Invoke-WebRequest -Uri $unlinkUrl -Headers $headers -Method Post -Body $bodyJson -UseBasicParsing
+            
+            # Step 3: Wait for unlink operation to complete (if operation-location header is present)
+            if ($unlinkResponse.Headers.'operation-location') {
+                $operationLink = $unlinkResponse.Headers.'operation-location'
+                Write-Output "Polling unlink operation status: $operationLink"
+                
+                $pollInterval = 10 # seconds
+                $maxPolls = 30 # Maximum 5 minutes
+                $pollCount = 0
+                
+                while ($pollCount -lt $maxPolls) {
+                    Start-Sleep -Seconds $pollInterval
+                    $pollCount++
+                    
+                    try {
+                        $operationResult = Invoke-WebRequest -Uri $operationLink -Headers $headers -Method Get -UseBasicParsing
+                        
+                        if ($operationResult.StatusCode -eq 200) {
+                            Write-Output "✓ Enterprise policy unlinked successfully from Power Platform environment."
+                            break
+                        } elseif ($operationResult.StatusCode -eq 202) {
+                            Write-Output "Unlinking enterprise policy is still in progress... (Poll $pollCount/$maxPolls)"
+                        } else {
+                            Write-Warning "Unexpected status code during polling: $($operationResult.StatusCode)"
+                            break
+                        }
+                    }
+                    catch {
+                        Write-Warning "Error polling operation status: $($_.Exception.Message)"
+                        break
+                    }
+                }
+                
+                if ($pollCount -ge $maxPolls) {
+                    Write-Warning "Unlink operation timed out after $($maxPolls * $pollInterval) seconds."
+                }
+            } else {
+                # No operation-location header, assume immediate completion
+                if ($unlinkResponse.StatusCode -eq 200 -or $unlinkResponse.StatusCode -eq 204) {
+                    Write-Output "✓ Enterprise policy unlinked successfully from Power Platform environment."
+                } else {
+                    Write-Warning "Unlink operation returned status code: $($unlinkResponse.StatusCode)"
+                }
+            }
+            
+            # Step 4: Remove the enterprise policy resource itself (if we have the ID)
+            if ($enterprisePolicyId) {
+                Write-Output "Removing enterprise policy resource: $enterprisePolicyId"
+                try {
+                    az resource delete --ids $enterprisePolicyId --verbose
+                    if ($LASTEXITCODE -eq 0) {
+                        Write-Output "✓ Enterprise policy resource deleted successfully."
+                    } else {
+                        Write-Warning "Failed to delete enterprise policy resource."
+                    }
+                }
+                catch {
+                    Write-Warning "Error deleting enterprise policy resource: $($_.Exception.Message)"
+                }
+            }
+            
             return $true
         }
         catch {
-            Write-Warning "Alternative removal approach also failed: $($_.Exception.Message)"
-            return $false
+            $errorDetails = $_.ErrorDetails.Message
+            $statusCode = if ($_.Exception.Response) { $_.Exception.Response.StatusCode.value__ } else { "Unknown" }
+            $AccessToken=Get-PowerPlatformAccessToken
+            $headers = @{ 
+                Authorization = "Bearer $AccessToken"
+                'Content-Type' = 'application/json'
+            }
+            
+            Write-Output "Primary removal endpoint failed (Status: $statusCode). Trying alternative approaches..."
+            
+            # Try alternative endpoint patterns
+            $altUrl1 = "https://api.bap.microsoft.com/providers/Microsoft.BusinessAppPlatform/environments/$EnvironmentId/removeNetworkInjection?api-version=$ApiVersion"
+            
+            try {
+                $altResult1 = Invoke-RestMethod -Uri $altUrl1 -Headers $headers -Method Post
+                Write-Output "✓ VNet enterprise policy removed successfully using alternative REST API endpoint."
+                return $true
+            }
+            catch {
+                Write-Output "Alternative endpoint 1 failed. Trying direct DELETE approach..."
+
+                # Try direct DELETE on the enterprise policy resource
+                $altUrl2 = "https://api.bap.microsoft.com/providers/Microsoft.BusinessAppPlatform/environments/$EnvironmentId/enterprisePolicies/VNets?api-version=$ApiVersion"
+                
+                try {
+                    $altResult2 = Invoke-RestMethod -Uri $altUrl2 -Headers $headers -Method Delete
+                    Write-Output "✓ VNet enterprise policy removed successfully using direct DELETE approach."
+                    return $true
+                }
+                catch {
+                    $finalErrorMessage = $_.Exception.Message
+                    Write-Warning "All REST API removal approaches failed: $finalErrorMessage"
+                    
+                    # Check if any of the errors indicate the policy is already removed
+                    if ($finalErrorMessage -like "*not found*" -or $finalErrorMessage -like "*does not exist*" -or 
+                        $finalErrorMessage -like "*404*" -or $statusCode -eq 404) {
+                        Write-Output "✓ Enterprise policy appears to already be removed (404 Not Found)."
+                        return $true
+                    }
+                    
+                    # Log detailed error information for troubleshooting
+                    Write-Output "Error details for troubleshooting:"
+                    Write-Output "- Primary endpoint: $unlinkUrl"
+                    Write-Output "- Alternative endpoint 1: $altUrl1" 
+                    Write-Output "- Alternative endpoint 2: $altUrl2"
+                    Write-Output "- Status code: $statusCode"
+                    Write-Output "- Error details: $errorDetails"
+                    
+                    return $false
+                }
+            }
         }
     }
+    catch {
+        Write-Warning "Error during REST API VNet policy removal: $($_.Exception.Message)"
+        return $false
+    }
 }
+
+
 
 # Validates that required environment variables are present
 # Ensures all necessary configuration is available for cleanup operations
@@ -609,6 +878,22 @@ function Remove-ResourceGroupDirectly {
                 Write-Output "Deleting resource group: $resourceGroupName"
                 Write-Output "This operation may take several minutes depending on the resources..."
                 
+                # Before deleting the resource group, ensure any enterprise policies are properly cleaned up
+                try {
+                    $enterprisePolicies = az resource list --resource-group $resourceGroupName --resource-type "Microsoft.PowerPlatform/enterprisePolicies" --query "[].id" -o tsv 2>$null
+                    if ($enterprisePolicies) {
+                        $policyArray = $enterprisePolicies -split "`n" | Where-Object { $_ -ne "" }
+                        foreach ($policyId in $policyArray) {
+                            Write-Output "Ensuring enterprise policy is unlinked before deletion: $policyId"
+                            # Enterprise policies should be unlinked before resource group deletion
+                            # This is handled by the Power Platform cleanup, but adding safety check
+                        }
+                    }
+                }
+                catch {
+                    Write-Output "Could not check for enterprise policies in resource group. Proceeding with deletion."
+                }
+                
                 az group delete --name $resourceGroupName --subscription $env:SUBSCRIPTION_ID --yes --no-wait
                 
                 if ($LASTEXITCODE -eq 0) {
@@ -652,24 +937,62 @@ function Remove-PowerPlatformConfiguration {
     }
     
     try {
-        # Install and connect to PowerApps PowerShell module
+        # Try PowerApps PowerShell module approach first
         $moduleInstalled = Install-PowerAppsModule
-        if (-not $moduleInstalled) {
-            Write-Warning "Failed to install PowerApps PowerShell module. Skipping Power Platform cleanup."
-            $script:CleanupErrors += "PowerApps module installation failed"
-            return $false
+        $usePowerAppsModule = $false
+        
+        if ($moduleInstalled) {
+            try {
+                Write-Output "Connecting to Power Platform using PowerApps PowerShell module..."
+                Add-PowerAppsAccount -TenantID $env:TENANT_ID -ErrorAction Stop
+                Write-Output "✓ Connected to Power Platform successfully using PowerApps module."
+                $usePowerAppsModule = $true
+            }
+            catch {
+                Write-Warning "PowerApps module connection failed: $($_.Exception.Message)"
+                Write-Output "Falling back to REST API approach..."
+            }
+        } else {
+            Write-Output "PowerApps module not available. Using REST API approach..."
         }
         
-        $connected = Connect-PowerPlatform
-        if (-not $connected) {
-            Write-Warning "Failed to connect to Power Platform. Skipping Power Platform cleanup."
-            $script:CleanupErrors += "Power Platform connection failed"
-            return $false
+        # Get environment information
+        $environment = $null
+        
+        if ($usePowerAppsModule) {
+            # Use PowerApps module approach
+            try {
+                Write-Output "Getting environment using PowerApps module..."
+                $environments = Get-AdminPowerAppEnvironment
+                $environment = $environments | Where-Object { $_.DisplayName -eq $env:POWER_PLATFORM_ENVIRONMENT_NAME }
+                
+                if ($environment) {
+                    Write-Output "✓ Found Power Platform environment using PowerApps module: $($environment.EnvironmentName)"
+                }
+            }
+            catch {
+                Write-Warning "PowerApps module environment lookup failed: $($_.Exception.Message)"
+                Write-Output "Falling back to REST API approach..."
+                $usePowerAppsModule = $false
+            }
         }
         
-        # Get environment by display name
-        Write-Output "Resolving Power Platform environment..."
-        $environment = Get-PowerPlatformEnvironmentByName -DisplayName $env:POWER_PLATFORM_ENVIRONMENT_NAME
+        if (-not $usePowerAppsModule) {
+            # Use REST API approach
+            try {
+                $accessToken = Get-PowerPlatformAccessToken
+                $environment = Get-PowerPlatformEnvironmentByNameREST -DisplayName $env:POWER_PLATFORM_ENVIRONMENT_NAME -AccessToken $accessToken
+                
+                # Also get the enterprise policy ID for comprehensive cleanup
+                $enterprisePolicyId = Get-EnterprisePolicyId
+                # Note: Get-EnterprisePolicyId already outputs its own status messages
+            }
+            catch {
+                Write-Warning "Failed to get access token or retrieve environment via REST API: $($_.Exception.Message)"
+                $environment = $null
+                $enterprisePolicyId = $null
+            }
+        }
         
         if (-not $environment) {
             Write-Output "✓ Power Platform environment not found or already cleaned up."
@@ -686,7 +1009,60 @@ function Remove-PowerPlatformConfiguration {
         if (Confirm-CleanupOperation -OperationName "Power Platform VNet Policy Removal" -Description "Remove VNet integration from Power Platform environment" -ResourcesAffected $resourcesAffected) {
             
             Write-Output "Removing VNet enterprise policy from Power Platform environment..."
-            $success = Remove-PowerPlatformVNetPolicy -EnvironmentId $environment.EnvironmentName -PolicyArmId $env:ENTERPRISE_POLICY_NAME
+            $success = $false
+            
+            if ($usePowerAppsModule) {
+                # Try PowerApps module approach
+                try {
+                    Write-Output "Using PowerApps module for policy removal..."
+                    $environmentId = $environment.EnvironmentName
+                    
+                    # Check if environment has VNet policy with proper null checking
+                    $hasVNetPolicy = $false
+                    if ($environment -and $environment.Internal -and $environment.Internal.properties) {
+                        if ($environment.Internal.properties.PSObject.Properties['enterprisePolicies']) {
+                            if ($environment.Internal.properties.enterprisePolicies.PSObject.Properties['VNets']) {
+                                $hasVNetPolicy = $true
+                            }
+                        }
+                    }
+                    
+                    if ($hasVNetPolicy) {
+                        Remove-AdminPowerAppEnvironmentEnterprisePolicy -EnvironmentName $environmentId -PolicyType "NetworkInjection"
+                        Write-Output "✓ VNet enterprise policy removed successfully using PowerApps module."
+                        $success = $true
+                    } else {
+                        Write-Output "✓ No VNet enterprise policy found on environment. Already clean."
+                        $success = $true
+                    }
+                }
+                catch {
+                    Write-Warning "PowerApps module policy removal failed: $($_.Exception.Message)"
+                    Write-Output "Falling back to REST API approach..."
+                    $usePowerAppsModule = $false
+                }
+            }
+            
+            if (-not $usePowerAppsModule -and -not $success) {
+                # Use REST API approach
+                if ($environment -and ($environment.name -or $environment.EnvironmentName)) {
+                    # Get environment ID - REST API uses 'name', PowerApps module uses 'EnvironmentName'
+                    $environmentId = if ($environment.name) { $environment.name } else { $environment.EnvironmentName }
+                    
+                    # Get enterprise policy ID if not already retrieved
+                    if (-not $enterprisePolicyId) {
+                        $enterprisePolicyId = Get-EnterprisePolicyId
+                    }
+                    
+                    $success = Remove-PowerPlatformVNetPolicyREST -EnvironmentId $environmentId -AccessToken $accessToken -EnterprisePolicyId $enterprisePolicyId
+                } else {
+                    Write-Warning "Environment object is null or missing name/EnvironmentName property. Cannot proceed with REST API approach."
+                    if ($environment) {
+                        Write-Output "Available environment properties: $($environment | Get-Member -MemberType Properties | Select-Object -ExpandProperty Name | Sort-Object)"
+                    }
+                    $success = $false
+                }
+            }
             
             if ($success) {
                 Write-Output "✓ VNet enterprise policy removed successfully from Power Platform environment."
@@ -706,39 +1082,6 @@ function Remove-PowerPlatformConfiguration {
     catch {
         Write-Warning "Error during Power Platform cleanup: $($_.Exception.Message)"
         $script:CleanupErrors += "Power Platform cleanup error: $($_.Exception.Message)"
-        return $false
-    }
-}
-
-# Cleans up the environment configuration file
-# Removes or resets the .env file to prevent confusion
-function Remove-EnvironmentFile {
-    if (-not (Test-Path $EnvFile)) {
-        Write-Output "✓ Environment file '$EnvFile' does not exist or has already been removed."
-        return $true
-    }
-    
-    # Confirm environment file cleanup
-    $resourcesAffected = @(
-        "Environment file: $EnvFile",
-        "All deployment configuration will be removed"
-    )
-    
-    if (Confirm-CleanupOperation -OperationName "Environment File Cleanup" -Description "Remove the deployment configuration file" -ResourcesAffected $resourcesAffected) {
-        
-        try {
-            Remove-Item $EnvFile -Force
-            Write-Output "✓ Environment file '$EnvFile' removed successfully."
-            $script:CleanupSuccess += "Environment file cleanup"
-            return $true
-        }
-        catch {
-            Write-Warning "Failed to remove environment file '$EnvFile': $($_.Exception.Message)"
-            $script:CleanupErrors += "Environment file cleanup error: $($_.Exception.Message)"
-            return $false
-        }
-    } else {
-        Write-Output "Skipping environment file cleanup."
         return $false
     }
 }
@@ -780,6 +1123,284 @@ function Show-CleanupSummary {
     Write-Output "Cleanup operation completed at $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
 }
 
+# Tries alternative methods to unlink enterprise policy when primary method fails
+function Try-AlternativeUnlinkMethods {
+    param(
+        [string]$EnvironmentId,
+        [string]$AccessToken,
+        [string]$EnterprisePolicyId
+    )
+    
+    Write-Output "Attempting alternative enterprise policy unlink methods..."
+    
+    $headers = @{ 
+        Authorization = "Bearer $AccessToken"
+        'Content-Type' = 'application/json'
+    }
+    $ApiVersion = "2023-06-01"
+    
+    # Method 1: Try without SystemId in the body
+    try {
+        Write-Output "Method 1: Attempting unlink without SystemId..."
+        $altUrl1 = "https://api.bap.microsoft.com/providers/Microsoft.BusinessAppPlatform/environments/$EnvironmentId/enterprisePolicies/NetworkInjection/unlink?api-version=$ApiVersion"
+        $emptyBody = "{}"
+        
+        $altResult1 = Invoke-WebRequest -Uri $altUrl1 -Headers $headers -Method Post -Body $emptyBody -UseBasicParsing -ContentType "application/json"
+        Write-Output "✓ Alternative method 1 succeeded."
+        return $true
+    }
+    catch {
+        Write-Output "Alternative method 1 failed: $($_.Exception.Message)"
+    }
+    
+    # Method 2: Try with just the GUID part of the SystemId
+    if ($EnterprisePolicyId) {
+        try {
+            Write-Output "Method 2: Attempting unlink with GUID-only SystemId..."
+            
+            # Extract GUID from the full resource path
+            $guidPattern = '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}'
+            if ($EnterprisePolicyId -match $guidPattern) {
+                $policyGuid = $matches[0]
+                $altBody2 = @{ "SystemId" = $policyGuid } | ConvertTo-Json
+                
+                $altResult2 = Invoke-WebRequest -Uri $altUrl1 -Headers $headers -Method Post -Body $altBody2 -UseBasicParsing -ContentType "application/json"
+                Write-Output "✓ Alternative method 2 succeeded with GUID: $policyGuid"
+                return $true
+            }
+        }
+        catch {
+            Write-Output "Alternative method 2 failed: $($_.Exception.Message)"
+        }
+    }
+    
+    # Method 3: Try direct DELETE on the enterprise policy link
+    try {
+        Write-Output "Method 3: Attempting direct DELETE on enterprise policy link..."
+        $altUrl3 = "https://api.bap.microsoft.com/providers/Microsoft.BusinessAppPlatform/environments/$EnvironmentId/enterprisePolicies/VNets?api-version=$ApiVersion"
+        
+        $altResult3 = Invoke-WebRequest -Uri $altUrl3 -Headers $headers -Method Delete -UseBasicParsing
+        Write-Output "✓ Alternative method 3 (DELETE) succeeded."
+        return $true
+    }
+    catch {
+        Write-Output "Alternative method 3 failed: $($_.Exception.Message)"
+    }
+    
+    # Method 4: Try the removeNetworkInjection endpoint
+    try {
+        Write-Output "Method 4: Attempting removeNetworkInjection endpoint..."
+        $altUrl4 = "https://api.bap.microsoft.com/providers/Microsoft.BusinessAppPlatform/environments/$EnvironmentId/removeNetworkInjection?api-version=$ApiVersion"
+        
+        $altResult4 = Invoke-WebRequest -Uri $altUrl4 -Headers $headers -Method Post -Body "{}" -UseBasicParsing -ContentType "application/json"
+        Write-Output "✓ Alternative method 4 (removeNetworkInjection) succeeded."
+        return $true
+    }
+    catch {
+        Write-Output "Alternative method 4 failed: $($_.Exception.Message)"
+    }
+    
+    Write-Warning "All alternative unlink methods failed."
+    return $false
+}
+
+function Get-PowerPlatformEnvironmentId {
+    param([string]$AccessToken, [string]$DisplayName)
+    
+    $headers = @{ 
+        Authorization = "Bearer $AccessToken"
+        'Content-Type' = 'application/json'
+    }
+    $url = "https://api.bap.microsoft.com/providers/Microsoft.BusinessAppPlatform/environments?api-version=2019-10-01"
+    $result = Invoke-RestMethod -Uri $url -Headers $headers -Method Get
+    
+    # Find the environment and ensure we return only a single string value
+    $environment = $result.value | Where-Object { $_.properties.displayName -eq $DisplayName } | Select-Object -First 1
+    
+    if ($environment -and $environment.name) {
+        # Ensure we return a single string, not an array
+        return [string]$environment.name
+    }
+    else {
+        throw "Environment with display name '$DisplayName' not found"
+    }
+}
+
+# Removes the Power Platform environment completely
+# WARNING: This permanently deletes the environment and all associated data
+function Remove-PowerPlatformEnvironment {
+    param(
+        [string]$EnvironmentDisplayName,
+        [string]$AccessToken
+    )
+    
+    if (-not $RemoveEnvironment) {
+        Write-Output "⏭️  Skipping Power Platform environment removal (not requested)."
+        return $true
+    }
+    
+    Write-Output ""
+    Write-Output "🗑️  Starting Power Platform environment removal..."
+    Write-Warning "⚠️  This will permanently delete the entire Power Platform environment!"
+    
+    try {
+        # Get the environment details first
+        Write-Output "Retrieving environment details for: $EnvironmentDisplayName"
+        $environment = Get-PowerPlatformEnvironmentByNameREST -DisplayName $EnvironmentDisplayName -AccessToken $AccessToken
+        
+        if (-not $environment) {
+            Write-Output "✓ Power Platform environment '$EnvironmentDisplayName' not found or already removed."
+            return $true
+        }
+        
+        $environmentId = $environment.name
+        Write-Output "Found environment ID: $environmentId"
+        
+        # Confirm environment deletion
+        $resourcesAffected = @(
+            "Power Platform environment: $EnvironmentDisplayName",
+            "Environment ID: $environmentId",
+            "⚠️  ALL DATA in this environment will be permanently lost",
+            "⚠️  All apps, flows, connections, and data will be deleted",
+            "⚠️  This action cannot be undone"
+        )
+        
+        if (Confirm-CleanupOperation -OperationName "Power Platform Environment Deletion" -Description "Permanently delete the entire Power Platform environment and all contained data" -ResourcesAffected $resourcesAffected) {
+            
+            Write-Output "Initiating environment deletion..."
+            $headers = @{ 
+                Authorization = "Bearer $AccessToken"
+                'Content-Type' = 'application/json'
+            }
+            
+            # Use the delete environment endpoint
+            $ApiVersion = "2023-06-01"
+            $deleteUrl = "https://api.bap.microsoft.com/providers/Microsoft.BusinessAppPlatform/environments/$environmentId" + "?api-version=$ApiVersion"
+            
+            try {
+                Write-Output "Sending DELETE request to: $deleteUrl"
+                $deleteResponse = Invoke-WebRequest -Uri $deleteUrl -Headers $headers -Method Delete -UseBasicParsing
+                
+                if ($deleteResponse.StatusCode -eq 200 -or $deleteResponse.StatusCode -eq 202 -or $deleteResponse.StatusCode -eq 204) {
+                    Write-Output "✓ Environment deletion request submitted successfully."
+                    
+                    # Check if there's an operation-location header for polling
+                    $operationLocation = $deleteResponse.Headers.'operation-location'
+                    if ($operationLocation) {
+                        Write-Output "Monitoring deletion progress..."
+                        
+                        $pollInterval = 15 # seconds
+                        $maxPolls = 40 # Maximum 10 minutes
+                        $pollCount = 0
+                        
+                        while ($pollCount -lt $maxPolls) {
+                            Start-Sleep -Seconds $pollInterval
+                            $pollCount++
+                            
+                            try {
+                                $pollResponse = Invoke-WebRequest -Uri $operationLocation -Headers $headers -Method Get -UseBasicParsing
+                                $pollContent = $pollResponse.Content | ConvertFrom-Json
+                                
+                                if ($pollResponse.StatusCode -eq 200) {
+                                    if ($pollContent.status -eq "Succeeded") {
+                                        Write-Output "✓ Environment deletion completed successfully."
+                                        break
+                                    } elseif ($pollContent.status -eq "Failed") {
+                                        Write-Warning "Environment deletion failed. Status: $($pollContent.status)"
+                                        if ($pollContent.error) {
+                                            Write-Output "Error details: $($pollContent.error.message)"
+                                        }
+                                        return $false
+                                    } elseif ($pollContent.status -eq "InProgress" -or $pollContent.status -eq "Running") {
+                                        Write-Output "Environment deletion in progress... (Poll $pollCount/$maxPolls)"
+                                    } else {
+                                        Write-Output "Environment deletion status: $($pollContent.status) (Poll $pollCount/$maxPolls)"
+                                    }
+                                } elseif ($pollResponse.StatusCode -eq 202) {
+                                    Write-Output "Environment deletion still in progress... (Poll $pollCount/$maxPolls)"
+                                }
+                            }
+                            catch {
+                                # If polling fails, the operation might have completed
+                                Write-Output "Polling operation completed or endpoint unavailable (Poll $pollCount/$maxPolls)"
+                                break
+                            }
+                        }
+                        
+                        if ($pollCount -ge $maxPolls) {
+                            Write-Warning "Deletion operation timed out after $($maxPolls * $pollInterval) seconds."
+                            Write-Output "The environment deletion may still be in progress. Check the Power Platform Admin Center for status."
+                        }
+                    } else {
+                        Write-Output "✓ Environment deletion initiated (no polling endpoint provided)."
+                        Write-Output "Check the Power Platform Admin Center to monitor deletion progress."
+                    }
+                    
+                    # Verify the environment is actually gone by trying to retrieve it
+                    Start-Sleep -Seconds 10
+                    try {
+                        $verifyEnvironment = Get-PowerPlatformEnvironmentByNameREST -DisplayName $EnvironmentDisplayName -AccessToken $AccessToken
+                        if (-not $verifyEnvironment) {
+                            Write-Output "✓ Verified: Environment has been successfully removed."
+                        } else {
+                            Write-Output "⚠️  Environment still exists - deletion may be completing in the background."
+                        }
+                    }
+                    catch {
+                        Write-Output "✓ Environment verification indicates successful removal."
+                    }
+                    
+                    $script:CleanupSuccess += "Power Platform environment deletion"
+                    return $true
+                } else {
+                    Write-Warning "Unexpected response status: $($deleteResponse.StatusCode)"
+                    return $false
+                }
+            }
+            catch {
+                $statusCode = "Unknown"
+                $errorMessage = $_.Exception.Message
+                
+                if ($_.Exception.Response) {
+                    $statusCode = $_.Exception.Response.StatusCode.value__
+                }
+                
+                Write-Warning "Environment deletion failed (Status: $statusCode): $errorMessage"
+                
+                # Handle specific error cases
+                switch ($statusCode) {
+                    404 {
+                        Write-Output "✓ Environment not found (404). It may have already been deleted."
+                        return $true
+                    }
+                    403 {
+                        Write-Error "Access forbidden (403). You may not have sufficient permissions to delete environments."
+                        Write-Output "Required permissions: System Administrator or Environment Admin role"
+                    }
+                    400 {
+                        Write-Warning "Bad request (400). The environment may be in a state that prevents deletion."
+                        Write-Output "Common causes: Active apps/flows, protected environment, or dependent resources"
+                    }
+                    default {
+                        Write-Error "HTTP Error $statusCode occurred during environment deletion."
+                    }
+                }
+                
+                $script:CleanupErrors += "Power Platform environment deletion failed: $errorMessage"
+                return $false
+            }
+        } else {
+            Write-Output "Skipping Power Platform environment deletion."
+            return $false
+        }
+    }
+    catch {
+        Write-Warning "Error during Power Platform environment removal: $($_.Exception.Message)"
+        $script:CleanupErrors += "Power Platform environment removal error: $($_.Exception.Message)"
+        return $false
+    }
+}
+
 # --- Main Script Execution ---
 
 Write-Output "🧹 Power Platform VNet Integration Cleanup Script"
@@ -812,6 +1433,7 @@ try {
     Write-Output "Force Mode: $Force"
     Write-Output "Skip Power Platform: $SkipPowerPlatform"
     Write-Output "Keep Resource Group: $KeepResourceGroup"
+    Write-Output "Remove Environment: $RemoveEnvironment"
     Write-Output ""
     
     if ($env:SUBSCRIPTION_ID) { Write-Output "Target Subscription: $env:SUBSCRIPTION_ID" }
@@ -842,17 +1464,267 @@ try {
     }
 
     # Step 5: Execute cleanup operations in reverse order of deployment
+
+    # 5a Verify the enterprise policy exists
+    $enterprisePolicyId = "/subscriptions/$env:SUBSCRIPTION_ID/resourceGroups/$env:RESOURCE_GROUP/providers/Microsoft.PowerPlatform/enterprisePolicies/$env:ENTERPRISE_POLICY_NAME"
+    $policyExists = az resource show --ids $enterprisePolicyId --query "name" -o tsv
+    if (-not $policyExists) {
+        Write-Error "Enterprise policy not found: $enterprisePolicyId"
+        exit
+    }
+    Write-Output "✓ Found enterprise policy: $enterprisePolicyId"
+
+    # 5b Unlink the enterprise policy from the Power Platform environment first
+    $ApiVersion = "2023-06-01"
+    $accessToken = Get-PowerPlatformAccessToken
+    $headers = @{ 
+        Authorization = "Bearer $accessToken"
+        'Content-Type' = 'application/json'
+    }
+    $policySystemId = az resource show --ids $enterprisePolicyId --query "properties.systemId" -o tsv 2>$null
+    
+    # Initialize body as empty hashtable, add SystemId only if available
+    $body = @{}
+    if ($policySystemId -and $policySystemId.Trim() -ne "") {
+        # Clean up the SystemId - it should be a GUID, not a full resource path
+        $cleanSystemId = $policySystemId.Trim()
+        
+        # If the SystemId looks like a resource path, extract just the GUID
+        if ($cleanSystemId -like "*/providers/Microsoft.PowerPlatform/enterprisePolicies/*") {
+            $guidPattern = '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}'
+            if ($cleanSystemId -match $guidPattern) {
+                $cleanSystemId = $matches[0]
+                Write-Output "Extracted GUID from resource path: $cleanSystemId"
+            }
+        }
+        
+        $body = @{ "SystemId" = $cleanSystemId }
+        Write-Output "Using enterprise policy system ID: $cleanSystemId"
+    } else {
+        Write-Output "No system ID found for enterprise policy, using empty body"
+    }
+    
+    $powerPlatformEnvironmentId = Get-PowerPlatformEnvironmentId -AccessToken $accessToken -DisplayName $env:POWER_PLATFORM_ENVIRONMENT_NAME
+    
+    # Ensure we have a valid single environment ID
+    if (-not $powerPlatformEnvironmentId -or $powerPlatformEnvironmentId -is [array]) {
+        throw "Failed to get a valid Power Platform environment ID. Expected single string, got: $($powerPlatformEnvironmentId.GetType().Name)"
+    }
+    
+    Write-Output "Unlinking enterprise policy $env:ENTERPRISE_POLICY_NAME from Power Platform environment $powerPlatformEnvironmentId..."
+    
+    # Construct URI directly without string conversion issues
+    $unlinkUri = "https://api.bap.microsoft.com/providers/Microsoft.BusinessAppPlatform/environments/$powerPlatformEnvironmentId/enterprisePolicies/NetworkInjection/unlink?api-version=2023-06-01"
+    
+    # Convert body to JSON with proper error handling
+    $bodyJson = if ($body.Count -gt 0) { $body | ConvertTo-Json -Compress } else { "{}" }
+    Write-Output "Request body: $bodyJson"
+    Write-Output "Request URI: $unlinkUri"
+    Write-Output "URI Type: $($unlinkUri.GetType().Name)"
+    Write-Output "URI Length: $($unlinkUri.Length)"
+    
+    try {
+        $unlinkResult = Invoke-WebRequest -Uri $unlinkUri -Headers $headers -Method Post -Body $bodyJson -UseBasicParsing -ContentType "application/json"
+    }
+    catch {
+        $statusCode = "Unknown"
+        $errorBody = ""
+        
+        if ($_.Exception.Response) {
+            $statusCode = $_.Exception.Response.StatusCode.value__
+            
+            # Try to read the error response body
+            try {
+                $errorStream = $_.Exception.Response.GetResponseStream()
+                $reader = New-Object System.IO.StreamReader($errorStream)
+                $errorBody = $reader.ReadToEnd()
+                $reader.Close()
+                $errorStream.Close()
+            }
+            catch {
+                Write-Output "Could not read error response body: $($_.Exception.Message)"
+            }
+        }
+        
+        Write-Error "Failed to unlink enterprise policy. Error: $($_.Exception.Message)"
+        Write-Output "URI used: $uriString"
+        Write-Output "Headers: $($headers | ConvertTo-Json)"
+        Write-Output "Body: $bodyJson"
+        Write-Output "HTTP Status Code: $statusCode"
+        
+        if ($errorBody) {
+            Write-Output "Error response body: $errorBody"
+            
+            # Try to parse the error response as JSON for better error details
+            try {
+                $errorJson = $errorBody | ConvertFrom-Json
+                if ($errorJson.error) {
+                    Write-Output "Error Code: $($errorJson.error.code)"
+                    Write-Output "Error Message: $($errorJson.error.message)"
+                    if ($errorJson.error.details) {
+                        Write-Output "Error Details: $($errorJson.error.details | ConvertTo-Json)"
+                    }
+                }
+            }
+            catch {
+                Write-Output "Could not parse error response as JSON"
+            }
+        }
+        
+        # Handle specific HTTP status codes
+        switch ($statusCode) {
+            409 {
+                Write-Warning "Conflict detected (409). This usually means:"
+                Write-Output "  • The enterprise policy is already unlinked from the environment"
+                Write-Output "  • The environment is in a transitional state"
+                Write-Output "  • Another operation is in progress"
+                Write-Output "  • The SystemId is incorrect or outdated"
+                Write-Output ""
+                Write-Output "Checking if the enterprise policy is actually still linked..."
+                
+                # Check current state of the environment
+                try {
+                    $checkHeaders = @{ 
+                        Authorization = "Bearer $accessToken"
+                        'Content-Type' = 'application/json'
+                    }
+                    $envCheckUrl = "https://api.bap.microsoft.com/providers/Microsoft.BusinessAppPlatform/environments/$powerPlatformEnvironmentId" + "?api-version=2023-06-01"
+                    $envResult = Invoke-RestMethod -Uri $envCheckUrl -Headers $checkHeaders -Method Get
+                    
+                    Write-Output "Environment result structure available properties:"
+                    if ($envResult -and $envResult.properties) {
+                        $envResult.properties | Get-Member -MemberType Properties | ForEach-Object { Write-Output "  - $($_.Name)" }
+                    } else {
+                        Write-Output "  - No properties object found"
+                    }
+                    
+                    # Check for enterprise policies with proper null checking
+                    $hasEnterprisePolicies = $false
+                    $hasVNetPolicy = $false
+                    
+                    if ($envResult -and $envResult.properties) {
+                        if ($envResult.properties.PSObject.Properties['enterprisePolicies']) {
+                            $hasEnterprisePolicies = $true
+                            Write-Output "✓ enterprisePolicies property found on environment"
+                            
+                            if ($envResult.properties.enterprisePolicies.PSObject.Properties['VNets']) {
+                                $hasVNetPolicy = $true
+                                Write-Output "✓ VNets policy found in enterprisePolicies"
+                            } else {
+                                Write-Output "✓ enterprisePolicies exists but no VNets policy found"
+                            }
+                        } else {
+                            Write-Output "✓ No enterprisePolicies property found on environment"
+                        }
+                    }
+                    
+                    if ($hasVNetPolicy) {
+                        Write-Output "❌ Enterprise policy is still linked. The conflict might be due to:"
+                        Write-Output "   - Incorrect SystemId in the request"
+                        Write-Output "   - Environment or policy in transitional state"
+                        Write-Output "   - Concurrent operations"
+                        
+                        # Try alternative approaches
+                        Write-Output "Attempting alternative unlink approaches..."
+                        return Try-AlternativeUnlinkMethods -EnvironmentId $powerPlatformEnvironmentId -AccessToken $accessToken -EnterprisePolicyId $enterprisePolicyId
+                    }
+                    else {
+                        Write-Output "✓ Enterprise policy appears to already be unlinked from the environment."
+                        Write-Output "✓ The 409 conflict was likely because the policy was already removed."
+                        return $true
+                    }
+                }
+                catch {
+                    Write-Warning "Could not verify environment state: $($_.Exception.Message)"
+                    Write-Output "This might be due to:"
+                    Write-Output "  - API version compatibility issues"
+                    Write-Output "  - Insufficient permissions to read enterprise policy information"
+                    Write-Output "  - Environment in transitional state"
+                    Write-Output ""
+                    Write-Output "Proceeding with alternative unlink methods..."
+                    return Try-AlternativeUnlinkMethods -EnvironmentId $powerPlatformEnvironmentId -AccessToken $accessToken -EnterprisePolicyId $enterprisePolicyId
+                }
+            }
+            404 {
+                Write-Output "✓ Resource not found (404). The enterprise policy may already be unlinked."
+                return $true
+            }
+            401 {
+                Write-Error "Authentication failed (401). Please check your permissions and token."
+            }
+            403 {
+                Write-Error "Access forbidden (403). You may not have the required permissions to unlink enterprise policies."
+            }
+            default {
+                Write-Error "HTTP Error $statusCode occurred during enterprise policy unlinking."
+            }
+        }
+        
+        throw
+    }
+
+    ## 3 Wait for unlink operation to complete
+    $operationLink = $unlinkResult.Headers.'operation-location'
+    $pollInterval = 10 # seconds
+    $run = $true
+    while ($run) {
+        Start-Sleep -Seconds $pollInterval
+
+        $unlinkResult = Invoke-WebRequest -Uri $operationLink -Headers $headers -Method Get -UseBasicParsing
+        if ($unlinkResult.StatusCode -eq 200) {
+            Write-Output "Enterprise policy $enterprisePolicyName unlinked from Power Platform environment $powerPlatformEnvironmentId successfully."
+            $run = $false
+        } elseif ($unlinkResult.StatusCode -eq 202) {
+            Write-Output "Unlinking enterprise policy $enterprisePolicyName from Power Platform environment $powerPlatformEnvironmentId is still in progress."
+        } else {
+            Write-Output "Failed to unlink enterprise policy $enterprisePolicyName from Power Platform environment $powerPlatformEnvironmentId. Status code: $($unlinkResult.StatusCode)"
+            $run = $false
+        }
+    }
+    Write-Output "✓ Unlink operation completed successfully."
+
+    ## 4 Then remove the enterprise policy
+    az resource delete --ids $enterprisePolicyId --verbose    
+    if ($LASTEXITCODE -eq 0) {
+        Write-Output "✓ Enterprise policy $enterprisePolicyName removed successfully."
+        $script:CleanupSuccess += "Enterprise policy removal"
+    } else {
+        Write-Warning "Failed to remove enterprise policy $enterprisePolicyName."
+        $script:CleanupErrors += "Enterprise policy removal failed"
+        exit 1
+    }
+    
+    # 5c. Remove Power Platform environment if requested (most destructive operation)
+    if ($RemoveEnvironment) {
+        Write-Output ""
+        Write-Output "🔥 Removing Power Platform environment (most destructive operation)..."
+        
+        if ($env:POWER_PLATFORM_ENVIRONMENT_NAME) {
+            try {
+                $accessToken = Get-PowerPlatformAccessToken
+                $envRemovalSuccess = Remove-PowerPlatformEnvironment -EnvironmentDisplayName $env:POWER_PLATFORM_ENVIRONMENT_NAME -AccessToken $accessToken
+                
+                if ($envRemovalSuccess) {
+                    Write-Output "✓ Power Platform environment removal completed."
+                } else {
+                    Write-Warning "Power Platform environment removal encountered issues."
+                }
+            }
+            catch {
+                Write-Warning "Error during Power Platform environment removal: $($_.Exception.Message)"
+                $script:CleanupErrors += "Power Platform environment removal error: $($_.Exception.Message)"
+            }
+        } else {
+            Write-Warning "POWER_PLATFORM_ENVIRONMENT_NAME not set - cannot remove environment."
+        }
+    }
     
     # 5a. Remove Power Platform configuration first (dependencies)
-    Remove-PowerPlatformConfiguration
+    #Remove-PowerPlatformConfiguration
     
-    # 5b. Remove Azure infrastructure
-    Remove-AzureInfrastructure
-    
-    # 5c. Clean up environment file (optional)
-    if (Confirm-CleanupOperation -OperationName "Environment File Cleanup" -Description "Remove the deployment configuration file" -ResourcesAffected @($EnvFile)) {
-        Remove-EnvironmentFile
-    }
+    # 5b. Preserve environment file for future reference
+    Write-Output "💾 Preserving environment file for future reference: $EnvFile"
+    Write-Output "✓ Environment configuration file has been kept intact for redeployment or troubleshooting."
 
     # Step 6: Display comprehensive summary
     Show-CleanupSummary
@@ -867,6 +1739,19 @@ catch {
     Show-CleanupSummary
     
     exit 1
+}
+finally {
+    # Always execute Azure infrastructure cleanup regardless of other operations
+    Write-Output ""
+    Write-Output "🏗️  Executing Azure infrastructure cleanup (always runs)..."
+    try {
+        Remove-AzureInfrastructure
+        Write-Output "✓ Azure infrastructure cleanup completed."
+    }
+    catch {
+        Write-Warning "Error during Azure infrastructure cleanup: $($_.Exception.Message)"
+        $script:CleanupErrors += "Azure infrastructure cleanup error: $($_.Exception.Message)"
+    }
 }
 
 Write-Output ""

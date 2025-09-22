@@ -9,7 +9,11 @@ infra:
   path: infra
 
 # No services defined as this is infrastructure-only deployment
+# Infrastructure includes:
+# - Azure resources (VNet, Subnets, APIM, Key Vault, etc.)
+# - Power Platform Environment with Dataverse (created via REST API)
 services: {}
 
 # Use user credentials for authentication (no managed identity required)
 # azd will use your logged-in Azure CLI credentials
+# Power Platform environment creation requires additional Power Platform admin permissions

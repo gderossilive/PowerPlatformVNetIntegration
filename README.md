@@ -1,22 +1,39 @@
 # Power Platform Virtual Network Integration with Azure API Management
 
 ## Overview
-This repository contains scripts and Infrastructure as Code (IaC) templates to set up Power Platform virtual network support with Azure API Management (APIM) integration. The solution deploys a complete infrastructure including virtual networks, subnets, private endpoints, and enterprise policies for Power Platform environments.
+This repository provides **complete end-to-end automation** for Power Platform virtual network integration with Azure API Management (APIM). The solution includes everything from Power Platform environment creation through Copilot Studio configuration, delivering a fully automated pipeline for secure, enterprise-grade integration scenarios.
+
+## 🚀 Complete Automation Pipeline
+
+This solution provides **5 automated scripts** that handle the entire deployment lifecycle:
+
+| Script | Purpose | Description |
+|--------|---------|-------------|
+| **0-CreatePowerPlatformEnvironment.ps1** | Environment Setup | Creates Power Platform environment with Dataverse |
+| **1-InfraSetup.ps1** | Infrastructure | Deploys Azure infrastructure (VNets, APIM, Private Endpoints) |
+| **2-SubnetInjectionSetup.ps1** | Network Integration | Links enterprise policy for VNet connectivity |
+| **3-CreateCustomConnector.ps1** | API Integration | Creates custom connectors from APIM APIs |
+| **4-SetupCopilotStudio.ps1** | AI Assistant | Configures Copilot Studio with connector integration |
+| **5-Cleanup.ps1** | Resource Cleanup | Safely removes all deployed resources |
 
 ## Architecture
-The solution creates:
-- **Primary and Secondary VNets**: Two virtual networks in different Azure regions for high availability
-- **Subnets**: Dedicated subnets for Power Platform injection and private endpoints
-- **Azure API Management**: APIM instance with private endpoint connectivity
-- **Enterprise Policy**: Power Platform enterprise policy for subnet injection
-- **Private Endpoints**: Secure connectivity to Azure services
+The solution creates a comprehensive enterprise architecture:
+
+- **🏢 Power Platform Environment**: Automated environment creation with Dataverse integration
+- **🌐 Dual-Region VNets**: Primary (West Europe) and Secondary (North Europe) virtual networks for high availability
+- **🔒 Private Connectivity**: Dedicated subnets for Power Platform injection and private endpoints
+- **📡 Azure API Management**: APIM instance with private endpoint connectivity and disabled public access
+- **⚖️ Enterprise Governance**: Power Platform enterprise policy for subnet injection and compliance
+- **🔌 Custom Connectors**: Automated connector creation from APIM APIs with authentication
+- **🤖 Copilot Studio Integration**: AI assistant configuration with sample topics and workflows
+- **🛡️ End-to-End Security**: Private network isolation, managed identities, and enterprise policies
 
 ## Prerequisites
-- Azure subscription with Contributor role access
-- Azure CLI installed and configured
-- PowerShell 5.1 or later (PowerShell Core 7+ recommended)
-- Power Platform admin permissions
-- Azure PowerShell modules for Power Platform cmdlets
+- **Azure Subscription**: Contributor role access for resource deployment
+- **Azure CLI**: Latest version installed and configured (`az login`)
+- **PowerShell Core 7+**: Cross-platform PowerShell (`pwsh` command available)
+- **Power Platform Admin**: Admin permissions in target tenant
+- **Azure Developer CLI**: (`azd`) for streamlined deployments
 
 ## Development Environment
 
@@ -42,7 +59,8 @@ This repository includes a complete development environment configuration using 
 pwsh
 
 # Run PowerShell scripts directly
-pwsh ./1-InfraCreation.ps1
+pwsh ./0-CreatePowerPlatformEnvironment.ps1
+pwsh ./1-InfraSetup.ps1
 pwsh ./2-SubnetInjectionSetup.ps1
 
 # Execute PowerShell commands
@@ -53,100 +71,45 @@ pwsh -c "Get-Date"
 If you prefer to set up the environment manually, ensure you have:
 - PowerShell Core 7+ installed (`pwsh` command available)
 - Azure CLI with login configured (`az login`)
+- Azure Developer CLI (`azd`) installed
 - Azure Bicep CLI extension (`az bicep install`)
 - Appropriate PowerShell modules for Power Platform operations
 
 ## Recent Updates & Fixes
 
-### Latest Changes (July 2025)
-- ✅ **New Cleanup Script**: Added comprehensive `3-Cleanup.ps1` for safe removal of all deployed resources
-  - Interactive cleanup with confirmation prompts for safety
-  - Support for automated cleanup with `-Force` parameter
-  - Selective cleanup options (`-SkipPowerPlatform`, `-KeepResourceGroup`)
-  - Robust error handling and detailed operation reporting
-  - Power Platform enterprise policy unlinking with operation monitoring
-  - Azure infrastructure cleanup using `azd down` with fallback to direct resource deletion
+### Latest Changes (September 2025)
+- ✅ **Complete Automation Pipeline**: Full end-to-end automation from environment creation to Copilot Studio
+  - New `0-CreatePowerPlatformEnvironment.ps1` for automated Power Platform environment creation
+  - Enhanced `3-CreateCustomConnector.ps1` for programmatic custom connector creation
+  - New `4-SetupCopilotStudio.ps1` for AI assistant configuration with connector integration
+  - Updated `5-Cleanup.ps1` for comprehensive resource cleanup
+- ✅ **Enhanced Script Documentation**: Professional-grade PowerShell documentation with comprehensive help
+  - Complete `.SYNOPSIS`, `.DESCRIPTION`, `.PARAMETER`, `.EXAMPLE` sections for all scripts
+  - Cross-platform compatibility notes and platform-specific guidance
+  - Integration examples and troubleshooting guides
+- ✅ **Power Platform Integration**: Deep integration with Power Platform services
+  - Automated environment creation with Dataverse support
+  - Custom connector creation using Power Platform APIs
+  - Copilot Studio bot creation and topic configuration
+  - Enterprise policy management and VNet integration
+- ✅ **Cross-Platform Excellence**: Full Linux, macOS, and Windows support
+  - PowerShell Core 7+ for consistent cross-platform experience
+  - Azure CLI integration for all Azure operations
+  - Dev container support for consistent development environment
+- ✅ **Modern DevOps Practices**: Azure Developer CLI integration and streamlined workflows
+  - `azd` integration for infrastructure deployment
+  - Environment file management and variable propagation
+  - Comprehensive error handling and validation
+
+### Previous Changes (July 2025)
+- ✅ **Comprehensive Cleanup Script**: Added `5-Cleanup.ps1` for safe removal of all deployed resources
 - ✅ **Enhanced Script Documentation**: Added comprehensive comment-based help to all PowerShell scripts
-  - Complete `.SYNOPSIS`, `.DESCRIPTION`, `.PARAMETER`, `.EXAMPLE`, `.INPUTS`, `.OUTPUTS`, `.NOTES`, and `.LINK` sections
-  - Detailed inline comments explaining complex operations and cross-platform considerations
-  - Professional-grade documentation following PowerShell best practices
 - ✅ **Improved Code Maintainability**: Enhanced comments throughout all scripts for better understanding
-  - Clear step-by-step explanations in main script execution flow
-  - Function-level documentation with purpose and parameter descriptions
-  - Context-aware comments for Azure CLI operations and API interactions
 - ✅ **Fixed Dev Container Configuration**: Added PowerShell Core support to `.devcontainer/devcontainer.json`
 - ✅ **Cross-Platform Compatibility**: Updated PowerShell scripts for Linux/Unix environments
 - ✅ **Azure CLI Integration**: Enhanced authentication checks and error handling
-- ✅ **Bicep Template Fixes**: 
-  - Fixed Sweden central region failover location mapping
-  - Resolved parameter mismatches in `main.parameters.json`
-  - Added missing enterprise policy name output
+- ✅ **Bicep Template Fixes**: Fixed region mapping and parameter mismatches
 - ✅ **azd Integration**: Updated PowerShell scripts to work with Azure Developer CLI deployment model
-- ✅ **Network Configuration**: Resolved subnet IP range validation issues
-
-### PowerShell Script Improvements (Latest)
-- ✅ **1-InfraCreation.ps1 Enhancements**:
-  - Comprehensive comment-based help documentation with detailed examples
-  - Cross-platform Set-ExecutionPolicy handling with automatic platform detection
-  - Enhanced Azure CLI authentication validation with clear error messages
-  - Fixed azd command syntax and output parsing with robust error handling
-  - Improved error handling with meaningful exit codes and user guidance
-  - Unix-style file path compatibility (`./` instead of `.\`)
-  - Detailed inline comments explaining environment variable parsing, azd integration, and APIM configuration
-  - Professional documentation including prerequisites, version info, and Microsoft Learn links
-
-- ✅ **2-SubnetInjectionSetup.ps1 Enhancements**:
-  - Complete script restructure with comprehensive help documentation
-  - Removed Azure PowerShell module dependencies for full cross-platform compatibility
-  - Replaced `Get-AzResource` with Azure CLI equivalents using `az resource show`
-  - Fixed missing `$EnvFile` parameter definition with proper validation
-  - Enhanced environment variable validation with detailed status output
-  - Fixed array-to-URI conversion in operation polling with robust header handling
-  - Added comprehensive error handling for all API calls with status code validation
-  - Cross-platform execution policy handling with automatic OS detection
-  - Modular function design with detailed comments and purpose explanations
-  - Enhanced operation polling with user-friendly status messages and emojis
-
-### Script Help Documentation
-
-Both PowerShell scripts now include comprehensive comment-based help documentation. You can access detailed information about each script using PowerShell's built-in help system:
-
-#### Getting Help
-```powershell
-# View basic help for infrastructure creation script
-Get-Help ./1-InfraCreation.ps1
-
-# View detailed help with examples
-Get-Help ./1-InfraCreation.ps1 -Full
-
-# View help for subnet injection setup script
-Get-Help ./2-SubnetInjectionSetup.ps1 -Detailed
-
-# Show parameter information
-Get-Help ./1-InfraCreation.ps1 -Parameter EnvFile
-```
-
-#### Documentation Features
-- **Comprehensive Descriptions**: Detailed explanations of what each script accomplishes
-- **Parameter Documentation**: Complete parameter descriptions with validation requirements
-- **Multiple Examples**: Practical usage examples for different scenarios
-- **Prerequisites**: Clear listing of required tools and permissions
-- **Cross-Platform Notes**: Platform-specific guidance for Windows, Linux, and macOS
-- **API References**: Links to relevant Microsoft Learn documentation
-- **Version Information**: Script version and modification history
-
-#### Script Quality Features
-- **Inline Comments**: Detailed explanations of complex operations and logic
-- **Function Documentation**: Each function includes purpose and parameter descriptions
-- **Error Context**: Meaningful error messages with troubleshooting guidance
-- **Process Flow**: Step-by-step comments explaining the execution sequence
-- **Best Practices**: Following PowerShell and Azure CLI best practices throughout
-
-### Breaking Changes
-- **PowerShell Execution**: Scripts now use `pwsh` (PowerShell Core) instead of Windows PowerShell
-- **azd Deployment**: Infrastructure deployment now uses `azd up` instead of direct `az deployment` commands
-- **Parameter Structure**: Simplified parameter files to match Bicep template definitions
-- **Azure CLI Only**: Scripts now use Azure CLI exclusively, no Azure PowerShell modules required
 
 ## Environment Configuration
 
@@ -154,10 +117,10 @@ Get-Help ./1-InfraCreation.ps1 -Parameter EnvFile
 Create a `.env` file in the root directory with the following variables:
 
 ```env
-TENANT_ID=your-tenant-id
-SUBSCRIPTION_ID=your-subscription-id
+TENANT_ID=86d068c0-1c9f-4b9e-939d-15146ccf2ad6
+AZURE_SUBSCRIPTION_ID=06dbbc7b-2363-4dd4-9803-95d07f1a8d3e
 AZURE_LOCATION=westeurope
-POWER_PLATFORM_ENVIRONMENT_NAME=Fabrikam-Prod
+POWER_PLATFORM_ENVIRONMENT_NAME=Woodgrove-Prod
 POWER_PLATFORM_LOCATION=europe
 RESOURCE_GROUP=
 PRIMARY_VIRTUAL_NETWORK_NAME=
@@ -171,7 +134,7 @@ APIM_ID=
 
 **Note**: The empty values will be populated automatically by the deployment scripts.
 
-## Deployment Process
+## Complete Deployment Process
 
 ### Prerequisites
 Before running the deployment scripts, ensure you have:
@@ -179,15 +142,43 @@ Before running the deployment scripts, ensure you have:
 2. **PowerShell Core Available**: The dev container includes `pwsh` automatically
 3. **Environment Variables Configured**: Update the `.env` file with your values
 
-### Step 1: Infrastructure Creation
-Run the infrastructure creation script using PowerShell Core:
+### Step 0: Power Platform Environment Creation
+Create the Power Platform environment that will be used for VNet integration:
 
 ```bash
-# Ensure you're logged into Azure CLI
-az login
+# Create Power Platform environment with Dataverse
+pwsh ./0-CreatePowerPlatformEnvironment.ps1
 
+# Create production environment without confirmations
+pwsh ./0-CreatePowerPlatformEnvironment.ps1 -EnvironmentType Production -EnableDataverse $true -Force
+
+# Use custom environment file
+pwsh ./0-CreatePowerPlatformEnvironment.ps1 -EnvFile "./environments/production.env"
+```
+
+This script performs the following actions:
+1. **Environment Variables Loading**: Loads configuration from the `.env` file
+2. **Azure Authentication Check**: Verifies Azure CLI login status and Power Platform permissions
+3. **Environment Creation**: Creates new Power Platform environment via REST API
+4. **Dataverse Provisioning**: Optionally provisions Dataverse database for full capabilities
+5. **Location Validation**: Validates Power Platform regions and maps to Azure regions
+6. **Environment File Updates**: Updates the `.env` file with environment details
+
+**Environment Types Supported:**
+- **Production**: For live workloads
+- **Sandbox**: For testing and development (default)
+- **Trial**: For evaluation scenarios
+- **Developer**: For individual development
+
+### Step 1: Infrastructure Creation
+Deploy the Azure infrastructure using the enhanced script:
+
+```bash
 # Run the infrastructure deployment script
-pwsh ./1-InfraCreation.ps1
+pwsh ./1-InfraSetup.ps1
+
+# Use custom environment file
+pwsh ./1-InfraSetup.ps1 -EnvFile "./environments/production.env"
 ```
 
 This script performs the following actions:
@@ -202,17 +193,15 @@ This script performs the following actions:
 6. **APIM Configuration**: Updates APIM to disable public access and configure private connectivity
 7. **Environment Variables Update**: Updates the `.env` file with deployment outputs
 
-**Key Improvements:**
-- **Platform Detection**: Uses PowerShell Core's `$IsLinux`/`$IsMacOS` variables for cross-platform compatibility
-- **Error Handling**: Comprehensive error checking with meaningful exit codes
-- **Azure Developer CLI Integration**: Leverages `azd` for streamlined deployment experience
-- **Output Mapping**: Automatically maps azd outputs to expected variable structure
-
 ### Step 2: Subnet Injection Setup
-Run the subnet injection setup script:
+Configure Power Platform VNet integration:
 
-```powershell
+```bash
+# Run the subnet injection setup script
 pwsh ./2-SubnetInjectionSetup.ps1
+
+# Use custom environment file
+pwsh ./2-SubnetInjectionSetup.ps1 -EnvFile "./config/production.env"
 ```
 
 This script performs the following actions:
@@ -225,66 +214,92 @@ This script performs the following actions:
    - API-based linking operation with proper headers and JSON payload
 4. **Operation Monitoring**: Polls the linking operation until completion with configurable timeouts
 
-**Enhanced Features:**
-- **Modular Functions**: Well-structured helper functions for better maintainability
-- **Error Handling**: Comprehensive error handling with status code validation
-- **Token Management**: Automatic token refresh for long-running operations
-- **Operation Polling**: Robust polling mechanism with configurable intervals and retries
-- **Strict Mode**: Uses PowerShell strict mode for better error detection
+### Step 3: Custom Connector Creation
+Create custom connectors from APIM APIs:
 
-### Step 3: Environment Cleanup (Optional)
-When you need to remove all deployed resources, use the cleanup script:
+```bash
+# Create connector for default Petstore API
+pwsh ./3-CreateCustomConnector.ps1
 
-```powershell
-pwsh ./3-Cleanup.ps1
+# Create connector for custom API
+pwsh ./3-CreateCustomConnector.ps1 -ApiId "my-api" -ConnectorName "My Business API Connector" -Force
+
+# Use custom environment file and subscription name
+pwsh ./3-CreateCustomConnector.ps1 -EnvFile "./production.env" -SubscriptionName "prod-connector-key"
+```
+
+This script performs the following actions:
+1. **API Definition Export**: Exports OpenAPI definitions from Azure API Management
+2. **Subscription Management**: Creates dedicated APIM subscription keys for authentication
+3. **Connector Creation**: Uses Power Platform APIs to create custom connectors programmatically
+4. **Security Configuration**: Sets up API key authentication automatically
+5. **Connection Configuration**: Configures connector properties and connection parameters
+
+### Step 4: Copilot Studio Integration
+Configure Copilot Studio with custom connector integration:
+
+```bash
+# Setup Copilot Studio with default connector
+pwsh ./4-SetupCopilotStudio.ps1
+
+# Setup with custom connector and bot name
+pwsh ./4-SetupCopilotStudio.ps1 -ConnectorName "My Business API Connector" -CopilotName "Business Assistant"
+
+# Setup without sample topics
+pwsh ./4-SetupCopilotStudio.ps1 -CreateSampleTopics:$false -Force
+```
+
+This script performs the following actions:
+1. **Connector Validation**: Validates custom connector availability in the Power Platform environment
+2. **Bot Creation**: Creates or updates Copilot Studio bots programmatically
+3. **Connector Integration**: Links custom connectors to the bot
+4. **Sample Topics**: Creates example topics demonstrating API usage
+5. **Authentication Setup**: Configures connector authentication flows
+
+### Step 5: Environment Cleanup (Optional)
+When you need to remove all deployed resources:
+
+```bash
+# Interactive cleanup with confirmation prompts
+pwsh ./5-Cleanup.ps1
+
+# Automated cleanup without confirmations (use with caution)
+pwsh ./5-Cleanup.ps1 -Force
+
+# Keep resource group but remove all resources
+pwsh ./5-Cleanup.ps1 -KeepResourceGroup
+
+# Skip Power Platform unlinking (Azure resources only)
+pwsh ./5-Cleanup.ps1 -SkipPowerPlatform
 ```
 
 This script safely removes all infrastructure and configurations:
-
-#### Interactive Cleanup (Recommended)
-```powershell
-# Standard cleanup with confirmation prompts
-pwsh ./3-Cleanup.ps1
-
-# Use custom environment file
-pwsh ./3-Cleanup.ps1 -EnvFile "./config/production.env"
-
-# Keep the resource group but remove all resources
-pwsh ./3-Cleanup.ps1 -KeepResourceGroup
-
-# Skip Power Platform unlinking (Azure resources only)
-pwsh ./3-Cleanup.ps1 -SkipPowerPlatform
-```
-
-#### Automated Cleanup
-```powershell
-# Automated cleanup without confirmations (use with caution)
-pwsh ./3-Cleanup.ps1 -Force
-
-# Combined options for scripted scenarios
-pwsh ./3-Cleanup.ps1 -Force -SkipPowerPlatform -KeepResourceGroup
-```
-
-#### Cleanup Process
 1. **Power Platform Configuration**: Unlinks enterprise policy from environment
 2. **Azure Infrastructure**: Removes all Azure resources using `azd down` or direct resource group deletion
 3. **Environment File**: Optionally removes the configuration file
 4. **Comprehensive Reporting**: Detailed summary of completed operations and any issues
 
-#### Safety Features
-- **Interactive Confirmations**: Multiple confirmation prompts for destructive operations
-- **Resource Validation**: Checks for resource existence before attempting deletion
-- **Error Handling**: Graceful handling of missing resources and API failures
-- **Detailed Logging**: Comprehensive status reporting throughout the cleanup process
-- **Rollback Protection**: Safe failure modes that prevent partial cleanup states
+## Complete Automation Workflow
 
-#### Parameters
-- **`-Force`**: Skip all confirmation prompts (use for automation)
-- **`-SkipPowerPlatform`**: Keep Power Platform configuration, remove only Azure resources
-- **`-KeepResourceGroup`**: Preserve the resource group while removing individual resources
-- **`-EnvFile`**: Specify custom environment file path
+The complete end-to-end automation workflow:
 
-**⚠️ Warning**: The cleanup script permanently deletes Azure resources and cannot be undone. Always ensure you have proper backups if needed.
+```bash
+# Complete deployment pipeline
+pwsh ./0-CreatePowerPlatformEnvironment.ps1  # Create Power Platform environment
+pwsh ./1-InfraSetup.ps1                      # Deploy Azure infrastructure
+pwsh ./2-SubnetInjectionSetup.ps1            # Configure VNet integration
+pwsh ./3-CreateCustomConnector.ps1           # Create custom connectors
+pwsh ./4-SetupCopilotStudio.ps1              # Setup Copilot Studio integration
+
+# Test the integration
+# 1. Go to https://copilotstudio.microsoft.com
+# 2. Select your environment
+# 3. Open your bot and test with sample phrases
+# 4. Go to https://make.powerapps.com to use custom connectors in Power Apps
+
+# Complete cleanup when done
+pwsh ./5-Cleanup.ps1
+```
 
 ## API Management - Importing and Publishing APIs
 
@@ -292,55 +307,29 @@ pwsh ./3-Cleanup.ps1 -Force -SkipPowerPlatform -KeepResourceGroup
 
 After the infrastructure deployment is complete, you can test the APIM instance by importing and publishing the Petstore API sample. This follows the Microsoft Learn guidance for [importing and publishing APIs](https://learn.microsoft.com/en-us/azure/api-management/import-and-publish).
 
-#### Using Azure Portal
-
-1. **Navigate to APIM Instance**:
-   - Go to the Azure Portal
-   - Find your APIM instance (name will be in the format `apim-{uniqueId}-xwz`)
-   - Open the API Management service
-
-2. **Import the Petstore API**:
-   - In the left menu, select **APIs**
-   - Click **+ Add API**
-   - Choose **OpenAPI** specification
-   - Use the following settings:
-     - **OpenAPI specification URL**: `https://petstore3.swagger.io/api/v3/openapi.json`
-     - **Display name**: `Petstore API`
-     - **Name**: `petstore-api`
-     - **API URL suffix**: `petstore`
-     - **Products**: Select **Unlimited** (for testing)
-
-3. **Test the API**:
-   - After import, select the Petstore API
-   - Choose an operation (e.g., **GET /pet/findByStatus**)
-   - Click **Test** tab
-   - Provide required parameters
-   - Click **Send** to test
-
 #### Using Azure CLI
 
-Alternatively, you can import the API using Azure CLI commands:
+You can import the API using Azure CLI commands:
 
-```powershell
-# Get the APIM name from your .env file or deployment outputs
-$apimName = $env:APIM_NAME
-$resourceGroup = $env:RESOURCE_GROUP
+```bash
+# Set variables from your .env file
+source .env
 
 # Import the Petstore API
-az apim api import `
-    --resource-group $resourceGroup `
-    --service-name $apimName `
-    --api-id "petstore-api" `
-    --display-name "Petstore API" `
-    --path "petstore" `
-    --specification-url "https://petstore3.swagger.io/api/v3/openapi.json" `
+az apim api import \
+    --resource-group "$RESOURCE_GROUP" \
+    --service-name "$APIM_NAME" \
+    --api-id "petstore-api" \
+    --display-name "Petstore API" \
+    --path "petstore" \
+    --specification-url "https://petstore3.swagger.io/api/v3/openapi.json" \
     --specification-format "OpenApi"
 
-# Create a subscription for testing (optional)
-az apim product api add `
-    --resource-group $resourceGroup `
-    --service-name $apimName `
-    --product-id "unlimited" `
+# Create a subscription for the API
+az apim product api add \
+    --resource-group "$RESOURCE_GROUP" \
+    --service-name "$APIM_NAME" \
+    --product-id "unlimited" \
     --api-id "petstore-api"
 ```
 
@@ -352,133 +341,11 @@ Since the APIM instance is configured with a private endpoint and public access 
 2. **From Virtual Network**: Deploy a test VM in the same VNet to test the API calls
 3. **VPN/ExpressRoute**: Use existing connectivity to the Azure VNet
 
-#### API Security and Subscriptions
+## Power Apps and Copilot Studio Integration
 
-Once imported, you can configure additional security:
+### Using Custom Connectors in Power Apps
 
-1. **Subscription Keys**: Create subscription keys for API access control
-2. **Policies**: Apply rate limiting, authentication, and transformation policies
-3. **Products**: Group APIs into products with specific access controls
-4. **OAuth/JWT**: Configure advanced authentication mechanisms
-
-**Example Test Call** (from within the VNet):
-```bash
-# Get subscription key from APIM portal first
-curl -X GET "https://{your-apim-name}.azure-api.net/petstore/pet/findByStatus?status=available" \
-     -H "Ocp-Apim-Subscription-Key: {your-subscription-key}"
-```
-
-This provides a complete testing scenario to validate that your APIM instance is properly configured and can serve APIs through the private endpoint connectivity.
-
-## Power Apps Custom Connector Integration
-
-### Creating a Custom Connector from APIM
-
-After successfully importing and testing APIs in your APIM instance, you can create custom connectors in Power Apps to consume these APIs. This follows the Microsoft Learn guidance for [exporting APIs to Power Platform](https://learn.microsoft.com/en-us/azure/api-management/export-api-power-platform).
-
-#### Prerequisites
-
-Before creating the custom connector, ensure:
-- ✅ **Power Platform Environment**: Your Power Platform environment is properly configured and linked to the enterprise policy
-- ✅ **API Management**: APIM instance is deployed with APIs imported (e.g., Petstore API)
-- ✅ **Network Integration**: VNet integration is established between Power Platform and Azure
-- ✅ **Permissions**: You have appropriate permissions in both Azure and Power Platform
-
-#### Method 1: Export from Azure API Management
-
-1. **Navigate to APIM Instance**:
-   ```powershell
-   # Open APIM in Azure Portal using your deployed instance
-   $apimName = $env:APIM_NAME
-   Write-Host "Navigate to: https://portal.azure.com -> $apimName"
-   ```
-
-2. **Export to Power Platform**:
-   - In APIM, go to **APIs** section
-   - Select your API (e.g., **Petstore API**)
-   - Click **Export** in the top menu
-   - Choose **Power Apps and Power Automate**
-   - Configure export settings:
-     - **Display name**: `Petstore Connector`
-     - **Environment**: Select your Power Platform environment
-     - **API URL**: Will use the private endpoint URL automatically
-
-3. **Complete the Export**:
-   - Review the API definition
-   - Click **Export** to create the custom connector
-   - The connector will be created in your Power Platform environment
-
-#### Method 2: Manual Custom Connector Creation
-
-If you prefer more control over the connector creation:
-
-1. **Get the API Definition**:
-   ```powershell
-   # Export API definition from APIM
-   $resourceGroup = $env:RESOURCE_GROUP
-   $apimName = $env:APIM_NAME
-   
-   # Export the OpenAPI definition
-   az apim api export `
-     --resource-group $resourceGroup `
-     --service-name $apimName `
-     --api-id "petstore-api" `
-     --format "openapi+json" `
-     --export-to "petstore-api-definition.json"
-   ```
-
-2. **Create Custom Connector in Power Apps**:
-   - Navigate to [Power Apps](https://make.powerapps.com)
-   - Select your environment (linked to the enterprise policy)
-   - Go to **Data** > **Custom connectors**
-   - Click **+ New custom connector** > **Import an OpenAPI file**
-   - Upload the exported JSON definition
-   - Configure connector properties:
-     - **Host**: Your APIM gateway URL (private endpoint)
-     - **Base URL**: `/petstore` (or your API path)
-
-3. **Configure Security**:
-   - Choose **API Key** authentication
-   - Set **Parameter label**: `Ocp-Apim-Subscription-Key`
-   - Set **Parameter name**: `Ocp-Apim-Subscription-Key`
-   - Set **Parameter location**: `Header`
-
-4. **Test the Connector**:
-   - Go to **Test** tab
-   - Provide the subscription key from APIM
-   - Test an operation (e.g., **findPetsByStatus**)
-   - Verify connectivity through the private network
-
-#### Method 3: Using Power Platform CLI
-
-For automated deployment scenarios:
-
-```powershell
-# Install Power Platform CLI if not already installed
-# winget install Microsoft.PowerPlatformCLI
-
-# Authenticate to Power Platform
-pac auth create --url "https://[your-environment].crm.dynamics.com"
-
-# Create custom connector from APIM
-pac connector create `
-  --settings-file "connector-settings.json" `
-  --definition-file "petstore-api-definition.json" `
-  --environment [your-environment-id]
-```
-
-#### Network Integration Benefits
-
-With the VNet integration established through your enterprise policy:
-
-1. **Private Connectivity**: Custom connectors can access APIM through private endpoints
-2. **Enhanced Security**: Traffic remains within your Azure virtual network
-3. **Performance**: Reduced latency through private network paths
-4. **Compliance**: Meets enterprise security requirements for data isolation
-
-#### Using the Custom Connector in Power Apps
-
-Once created, you can use the connector in your Power Apps:
+Once created, you can use the custom connectors in your Power Apps:
 
 1. **Create a New App**:
    - Go to **Apps** in Power Apps portal
@@ -486,7 +353,7 @@ Once created, you can use the connector in your Power Apps:
 
 2. **Add Data Source**:
    - In the app designer, click **Data** > **Add data**
-   - Search for your custom connector (`Petstore Connector`)
+   - Search for your custom connector (e.g., `Petstore Connector`)
    - Add it to your app
 
 3. **Use in Formulas**:
@@ -498,30 +365,19 @@ Once created, you can use the connector in your Power Apps:
    Gallery1.Items = 'Petstore Connector'.findPetsByStatus({status: "available"}).value
    ```
 
-4. **Handle Authentication**:
-   - When first using the connector, you'll be prompted for the subscription key
-   - This establishes the connection for future use
+### Testing Copilot Studio Integration
 
-#### Troubleshooting Custom Connectors
+After setting up Copilot Studio integration:
 
-**Common Issues:**
-- **Connection Timeout**: Verify private endpoint connectivity and DNS resolution
-- **Authentication Errors**: Check APIM subscription key validity and permissions
-- **API Not Found**: Ensure API is properly imported and published in APIM
-- **Network Issues**: Verify enterprise policy is correctly linked to environment
+1. **Test in Copilot Studio**:
+   - Use the **Test copilot** panel
+   - Type: "Show me available pets"
+   - Verify the API call works through your private network
 
-**Validation Steps:**
-```powershell
-# Check enterprise policy status
-$policyName = $env:ENTERPRISE_POLICY_NAME
-$resourceGroup = $env:RESOURCE_GROUP
-az resource show --name $policyName --resource-group $resourceGroup --resource-type "Microsoft.PowerPlatform/enterprisePolicies"
-
-# Verify APIM API availability
-az apim api list --resource-group $resourceGroup --service-name $env:APIM_NAME --output table
-```
-
-This integration demonstrates the complete end-to-end scenario: from Azure infrastructure through API management to Power Platform consumption, all secured through private network connectivity.
+2. **Sample Test Phrases**:
+   - "Show me available pets"
+   - "What pets are available?"
+   - "Find pets for adoption"
 
 ## Infrastructure Components
 
@@ -556,153 +412,116 @@ This integration demonstrates the complete end-to-end scenario: from Azure infra
 - Disabled public access on API Management
 - Enterprise policies for Power Platform governance
 
-## Deployment Sequence
-
-The deployment follows a specific sequence to handle Azure resource dependencies:
-
-1. **APIM Creation**: Created with public access enabled (required for initial provisioning)
-2. **Private Endpoint**: Created after APIM is ready
-3. **APIM Configuration Update**: PowerShell script updates APIM to:
-   - Disable public access (`--public-network-access false`)
-   - Remove VNet integration (`--virtual-network None`) for simplified setup
-4. **Enterprise Policy**: Created during Bicep deployment with proper subnet delegation
-5. **Policy Linking**: Separate script links enterprise policy to Power Platform environment
-
-**Key Design Decisions:**
-- **Fixed Suffix**: Uses "xwz" suffix for all resources to ensure consistent naming
-- **Simplified APIM**: Removes complex VNet integration while maintaining private endpoint connectivity
-- **Modular Approach**: Separates infrastructure creation from Power Platform environment linking
-
 ## Troubleshooting
 
 ### Recent Issues & Solutions
 
 #### 1. **Set-ExecutionPolicy Error on Linux**
 **Error**: `Operation is not supported on this platform`
-**Solution**: ✅ Fixed - Both scripts now detect Linux/macOS and skip Windows-specific commands
+**Solution**: ✅ Fixed - All scripts now detect Linux/macOS and skip Windows-specific commands
 
 #### 2. **Azure CLI Authentication Issues**
 **Error**: `Please run 'az login' to setup account`
 **Solution**: ✅ Fixed - Added automatic authentication checks with helpful error messages
 
-#### 3. **Subnet Range Outside VNet Error**
-**Error**: `Subnet 'snet-injection-xx' is not valid because its IP address range is outside the IP address range of virtual network`
-**Solution**: ✅ Fixed - Corrected Sweden region failover mapping and parameter validation
+#### 3. **Power Platform Environment Not Found**
+**Error**: `Power Platform environment 'EnvironmentName' not found`
+**Solution**: ✅ Fixed - Use `0-CreatePowerPlatformEnvironment.ps1` to create the environment first
 
-#### 4. **azd Command Syntax Errors**
-**Error**: `unknown flag: --location`
-**Solution**: ✅ Fixed - Updated to use correct `azd up --environment` syntax
+#### 4. **Custom Connector Creation Failed**
+**Error**: Various connector creation errors
+**Solution**: ✅ Fixed - Added `3-CreateCustomConnector.ps1` for automated connector creation
 
-#### 5. **Parameter Mismatch Errors**
-**Error**: Deployment fails with undefined parameter references
-**Solution**: ✅ Fixed - Cleaned up `main.parameters.json` to match `main.bicep` parameters exactly
+#### 5. **Copilot Studio Integration Issues**
+**Error**: Bot creation or connector linking failures
+**Solution**: ✅ Fixed - Added `4-SetupCopilotStudio.ps1` for automated integration
 
-#### 6. **Get-AzResource Not Recognized**
-**Error**: `The term 'Get-AzResource' is not recognized as a name of a cmdlet`
-**Solution**: ✅ Fixed - Replaced all Azure PowerShell commands with Azure CLI equivalents
+### Legacy Issues (Previously Fixed)
 
-#### 7. **Missing Environment Variable**
-**Error**: `The variable '$EnvFile' cannot be retrieved because it has not been set`
-**Solution**: ✅ Fixed - Added proper variable definition and environment validation
-
-#### 8. **Array to URI Conversion Error**
-**Error**: `Cannot convert 'System.String[]' to the type 'System.Uri'`
-**Solution**: ✅ Fixed - Added array handling for HTTP headers and URI validation
-
-### Legacy Issues
-
-1. **APIM Deployment Errors**: 
-   - Ensure APIM is created with public access enabled initially
-   - Private endpoint must be created before updating APIM configuration
-   - Current approach uses simplified configuration (`--virtual-network None`)
-
-2. **APIM Configuration Updates**:
-   - Script waits 120 seconds for private endpoint to be ready before APIM updates
-   - Public access is disabled (`--public-network-access false`)
-   - VNet integration is removed (`--virtual-network None`) for simplified deployment
-
-3. **Enterprise Policy Linking Issues**:
-   - Verify Power Platform environment exists and display name matches exactly
-   - Check that enterprise policy was created successfully in Step 1
-   - Ensure proper API permissions for Power Platform Admin API access
-
-4. **Subnet Delegation Issues**:
-   - Subnets are automatically delegated during Bicep deployment
-   - Verify subnets have sufficient IP address space
-   - Check that subnets are properly configured in the VNet modules
+1. **APIM Deployment Errors**: ✅ Fixed with simplified configuration approach
+2. **Subnet Range Outside VNet Error**: ✅ Fixed with corrected region failover mapping
+3. **azd Command Syntax Errors**: ✅ Fixed with updated command syntax
+4. **Parameter Mismatch Errors**: ✅ Fixed with cleaned up parameter files
+5. **Get-AzResource Not Recognized**: ✅ Fixed by replacing with Azure CLI equivalents
 
 ### Validation
 
 After deployment, verify:
+- Power Platform environment exists and is accessible
 - APIM instance is created and public access is disabled
 - Private endpoint exists and is connected to APIM
 - Enterprise policy is linked to Power Platform environment
-- Resource group contains all expected resources with consistent naming (suffix from `uniqueString()`)
-
-### Current Configuration Notes
-
-**Modern Development Environment:**
-- PowerShell Core 7+ for cross-platform compatibility
-- Azure Developer CLI (azd) for streamlined deployments
-- VS Code Dev Container with all tools pre-configured
-- Ubuntu 24.04 LTS base environment
-
-**Dynamic Resource Naming:**
-- Resource group suffix is generated using `uniqueString()` function
-- All resources use this consistent suffix for easy identification
-- Format: `{environmentName}-{3-char-hash}`
-
-**Simplified APIM Setup:**
-- APIM public access is disabled post-deployment
-- VNet integration is not configured (using `None` setting)
-- Private endpoint provides secure connectivity without complex VNet integration
-
-**Regional Failover Support:**
-- Fixed Sweden Central region mapping (now points to North Europe)
-- All supported Azure regions have proper failover pairs defined
-- Automatic secondary region selection based on primary region
+- Custom connectors are created and functional
+- Copilot Studio bot is configured and responsive
 
 ## File Structure
 
 ```
-├── 1-InfraCreation.ps1              # Main infrastructure deployment script
-├── 2-SubnetInjectionSetup.ps1       # Enterprise policy linking script
-├── 3-Cleanup.ps1                    # Complete cleanup and removal script
-├── .env                             # Environment variables
-├── infra/                           # Bicep templates
+├── 0-CreatePowerPlatformEnvironment.ps1  # Power Platform environment creation script
+├── 1-InfraSetup.ps1                      # Main infrastructure deployment script
+├── 2-SubnetInjectionSetup.ps1            # Enterprise policy linking script
+├── 3-CreateCustomConnector.ps1           # Custom connector creation script
+├── 4-SetupCopilotStudio.ps1              # Copilot Studio integration script
+├── 5-Cleanup.ps1                         # Complete cleanup and removal script
+├── .env                                   # Environment variables
+├── azure.yaml                            # Azure Developer CLI configuration
+├── infra/                                # Bicep templates
 │   ├── main.bicep
 │   ├── apim-with-private-endpoint.bicep
 │   ├── vnet-subnet-with-delegation-module.bicep
 │   └── powerplatform-network-injection-enterprise-policy-module.bicep
-├── orig-scripts/                    # Original Microsoft scripts
-└── scripts/                         # Additional utility scripts
+├── orig-scripts/                         # Original Microsoft scripts
+└── scripts/                              # Additional utility scripts
 ```
+
+## Getting Help
+
+### PowerShell Script Documentation
+
+All PowerShell scripts include comprehensive comment-based help documentation. You can access detailed information about each script using PowerShell's built-in help system:
+
+```powershell
+# View basic help for any script
+Get-Help ./0-CreatePowerPlatformEnvironment.ps1
+
+# View detailed help with examples
+Get-Help ./1-InfraSetup.ps1 -Full
+
+# View help for specific parameters
+Get-Help ./3-CreateCustomConnector.ps1 -Parameter ApiId
+
+# Show parameter information
+Get-Help ./4-SetupCopilotStudio.ps1 -Parameter ConnectorName
+```
+
+### Documentation Features
+- **Comprehensive Descriptions**: Detailed explanations of what each script accomplishes
+- **Parameter Documentation**: Complete parameter descriptions with validation requirements
+- **Multiple Examples**: Practical usage examples for different scenarios
+- **Prerequisites**: Clear listing of required tools and permissions
+- **Cross-Platform Notes**: Platform-specific guidance for Windows, Linux, and macOS
+- **API References**: Links to relevant Microsoft Learn documentation
 
 ## References
 - [Microsoft Learn: Set up virtual network support for Power Platform](https://learn.microsoft.com/en-us/power-platform/admin/vnet-support-setup-configure?tabs=new#set-up-virtual-network-support)
 - [GitHub: Power Platform Admin Scripts](https://github.com/microsoft/PowerApps-Samples/tree/main/power-platform/administration/virtual-network-support)
 - [Azure API Management Private Endpoints](https://docs.microsoft.com/en-us/azure/api-management/private-endpoint)
+- [Power Platform Custom Connectors](https://learn.microsoft.com/en-us/connectors/custom-connectors/)
+- [Copilot Studio Documentation](https://learn.microsoft.com/en-us/microsoft-copilot-studio/)
 
 ---
 
 ## Notes
 
-### Current Implementation (July 2025)
-- **Enhanced Documentation**: Both PowerShell scripts feature comprehensive comment-based help following Microsoft standards
-- **Enterprise-Grade Comments**: Detailed inline documentation explaining complex operations, API interactions, and cross-platform considerations
-- **Professional Script Structure**: Modular functions with clear purpose documentation and parameter validation
-- **Cross-Platform Scripting**: Full PowerShell Core support with automatic platform detection and appropriate command execution
-- The infrastructure uses a simplified APIM deployment approach with private endpoints but without VNet integration
-- Dynamic suffix using `uniqueString()` function ensures unique resource names across deployments
-- Cross-platform PowerShell Core support enables development on Windows, Linux, and macOS
-- Azure Developer CLI (azd) integration provides streamlined deployment experience
-- The solution supports both primary and secondary regions for high availability
-- Environment variables are automatically updated after successful deployment
-- Both PowerShell scripts now use Azure CLI exclusively (no Azure PowerShell modules required)
-- Enhanced error handling and validation throughout all deployment scripts
-- Robust HTTP header handling for Power Platform API operations
-- The `2-SubnetInjectionSetup.ps1` script uses modular functions for better maintainability and error handling
-- Enterprise policy linking is handled separately from infrastructure deployment for better separation of concerns
+### Current Implementation (September 2025)
+- **Complete End-to-End Automation**: From Power Platform environment creation through Copilot Studio configuration
+- **Professional Script Documentation**: All scripts feature comprehensive comment-based help following Microsoft standards
+- **Cross-Platform Excellence**: Full PowerShell Core support with automatic platform detection
+- **Modern DevOps Integration**: Azure Developer CLI (azd) integration for streamlined deployment experience
+- **Power Platform Deep Integration**: Native API integration for environment, connector, and bot management
+- **Enterprise-Grade Security**: Private network isolation, managed identities, and enterprise policies
+- **Comprehensive Error Handling**: Robust validation and user-friendly error messages throughout
+- **Automated Resource Management**: Dynamic resource naming and automatic environment file updates
 
 ### Development Environment Features
 - **Dev Container**: Complete development environment with all tools pre-installed
@@ -711,35 +530,15 @@ After deployment, verify:
 - **Azure Bicep**: Infrastructure as Code with IntelliSense support
 - **azd Integration**: Simplified deployment workflows
 
-### Script Execution Flow (Enhanced)
-All PowerShell scripts now follow a robust execution pattern:
+### Script Execution Flow
+All PowerShell scripts follow a consistent, robust execution pattern:
 
-**1-InfraCreation.ps1**:
-1. ✅ Cross-platform environment detection
-2. ✅ Environment variable loading with Unix path compatibility
-3. ✅ Azure CLI authentication validation
-4. ✅ Microsoft.PowerPlatform provider registration
-5. ✅ Azure Developer CLI deployment (`azd up`)
-6. ✅ Output parsing and environment file updates
-7. ✅ APIM private endpoint configuration
-
-**2-SubnetInjectionSetup.ps1**:
-1. ✅ Environment variable validation with detailed output
-2. ✅ Azure CLI authentication with subscription context
-3. ✅ Enterprise policy resource discovery via Azure CLI
-4. ✅ Power Platform API authentication and environment lookup
-5. ✅ Enterprise policy linking with robust operation polling
-6. ✅ Array-safe HTTP header handling for operation status
-
-**3-Cleanup.ps1** (New):
-1. ✅ Cross-platform environment detection and validation
-2. ✅ Environment variable validation with flexible requirements
-3. ✅ Azure CLI authentication with subscription verification
-4. ✅ Interactive confirmation prompts with safety checks
-5. ✅ Power Platform enterprise policy unlinking with operation monitoring
-6. ✅ Azure infrastructure cleanup using `azd down` with fallback options
-7. ✅ Optional environment file cleanup
-8. ✅ Comprehensive operation summary and error reporting
+1. **Cross-platform environment detection** with appropriate command handling
+2. **Environment variable loading** with comprehensive validation
+3. **Azure CLI authentication** with subscription context verification
+4. **Resource deployment/configuration** using Azure APIs and PowerShell Core
+5. **Operation monitoring** with user-friendly status reporting
+6. **Environment file updates** with deployment outputs
 
 ### Compatibility Notes
 - **PowerShell**: Requires PowerShell Core 7+ (`pwsh`) for cross-platform support

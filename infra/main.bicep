@@ -135,17 +135,19 @@ var networksConfiguration = [
     category: 'primary'
     location: azureLocation
     suffix: 'WE'
-    vnetAddressPrefixes: '10.10.0.0/23'
+    vnetAddressPrefixes: '10.10.0.0/21'
     injectionSnetAddressPrefixes: '10.10.0.0/24'
     privateEndpointsSnetAddressPrefixes: '10.10.1.0/24'
+    apimSnetAddressPrefixes: '10.10.2.0/24'
   }
   {
     category: 'secondary'
     location: failoverLocation
     suffix: 'NE'
-    vnetAddressPrefixes: '10.20.0.0/23'
+    vnetAddressPrefixes: '10.20.0.0/21'
     injectionSnetAddressPrefixes: '10.20.0.0/24'
     privateEndpointsSnetAddressPrefixes: '10.20.1.0/24'
+    apimSnetAddressPrefixes: '10.20.2.0/24'
   }
 ]
 
@@ -179,13 +181,13 @@ module networks 'vnet-subnet-with-delegation-module.bicep' = [for network in net
   name: 'network-${network.category}'
   scope: resourceGroup
   params: {
-    powerPlatformEnvironmentName: environmentGroupName
     networkCategory: network.category
     locationSuffix: network.suffix
     location: network.location
     vnetAddressPrefixes: network.vnetAddressPrefixes
     injectionSnetAddressPrefixes: network.injectionSnetAddressPrefixes
     privateEndpointsSnetAddressPrefixes: network.privateEndpointsSnetAddressPrefixes
+    apimSnetAddressPrefixes: network.apimSnetAddressPrefixes
     environmentName: environmentName
     resourceToken: resourceToken
   }
@@ -199,30 +201,19 @@ module apimWithPrivateEndpoint 'apim-with-private-endpoint.bicep' = {
     apimName: APIMName
     location: azureLocation
     privateEndpointSubnetId: networks[0].outputs.privateEndpointSnetId
+    apimSubnetId: networks[0].outputs.apimSnetId
+    vnetId: networks[0].outputs.vnetId
     publisherEmail: apimPublisherEmail
     publisherName: apimPublisherName
   }
 }
 
+// Function App module removed - to be added back when storage issues are resolved
+
 /*
-// Import Petstore API into APIM
-module apimImportPetstoreApi 'apim-import-petstore-api.bicep' = {
-  name: 'import-petstore-api'
-  params: {
-    apimName: APIMName
-    apiName: 'petstore'
-    apiDisplayName: 'Petstore Swagger API'
-    apiPath: 'petstore'
-    openApiUrl: 'https://petstore3.swagger.io/api/v3/openapi.json'
-    userId: '/users/gderossi' // You may need to use the full APIM user resource ID
-    subscriptionName: 'petstore-subscription-gderossi'
-    subscriptionDisplayName: 'Petstore Subscription for gderossi'
-  }
-  dependsOn: [apimWithPrivateEndpoint]
-}
-
-// Add subscription key for user 'gderossi' to Petstore API
-
+// Petstore API has been imported manually via Azure CLI
+// due to OpenAPI specification compatibility issues
+// The API is available at: https://{apim-name}.azure-api.net/petstore
 */
 
 // Array of objects for the Enterprise Policy creation
@@ -264,12 +255,16 @@ output resourceGroup string = resourceGroup.name
 output apimName string = apimWithPrivateEndpoint.outputs.apimName
 output apimId string = apimWithPrivateEndpoint.outputs.apimId
 output apimPrivateEndpointId string = apimWithPrivateEndpoint.outputs.privateEndpointId
+output apimPrivateDnsZoneId string = apimWithPrivateEndpoint.outputs.privateDnsZoneId
+output apimPrivateDnsZoneName string = apimWithPrivateEndpoint.outputs.privateDnsZoneName
 output privateEndpointSubnetId string = networks[0].outputs.privateEndpointSnetId
 output enterprisePolicyName string = 'ep-${environmentGroupName}-${resourceToken}'
 
 // Minimal managed identity outputs for azd compatibility
 output AZURE_CLIENT_ID string = minimalIdentity.outputs.clientId
 output AZURE_PRINCIPAL_ID string = minimalIdentity.outputs.principalId
+
+// Function App outputs removed - will be added back when function app deployment is successful
 
 /*
 output petstoreApiName string = apimImportPetstoreApi.outputs.apiName

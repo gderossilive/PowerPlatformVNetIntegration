@@ -1,0 +1,250 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.37.4.10188",
+      "templateHash": "295962529476562516"
+    }
+  },
+  "parameters": {
+    "powerPlatformEnvironmentName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 50,
+      "metadata": {
+        "description": "Name of the Power Platform environment to integrate with the network resources"
+      }
+    },
+    "networkCategory": {
+      "type": "string",
+      "allowedValues": [
+        "primary",
+        "secondary"
+      ],
+      "metadata": {
+        "description": "Category of the network resources to configure"
+      }
+    },
+    "locationSuffix": {
+      "type": "string",
+      "defaultValue": "WE",
+      "allowedValues": [
+        "WE",
+        "NE"
+      ],
+      "metadata": {
+        "description": "Suffix for the resources in the case of multiple networks"
+      }
+    },
+    "location": {
+      "type": "string",
+      "defaultValue": "westeurope",
+      "allowedValues": [
+        "westeurope",
+        "northeurope"
+      ],
+      "metadata": {
+        "description": "Location for all resources"
+      }
+    },
+    "vnetAddressPrefixes": {
+      "type": "string",
+      "defaultValue": "10.10.0.0/21",
+      "metadata": {
+        "description": "Address prefixes for the virtual network"
+      }
+    },
+    "injectionSnetAddressPrefixes": {
+      "type": "string",
+      "defaultValue": "10.10.0.0/24",
+      "metadata": {
+        "description": "Address prefixes for the subnet used for injection"
+      }
+    },
+    "privateEndpointsSnetAddressPrefixes": {
+      "type": "string",
+      "defaultValue": "10.10.1.0/24",
+      "metadata": {
+        "description": "Address prefixes for the subnet used for private endpoints"
+      }
+    },
+    "apimSnetAddressPrefixes": {
+      "type": "string",
+      "defaultValue": "10.10.2.0/24",
+      "metadata": {
+        "description": "Address prefixes for the subnet used for API Management"
+      }
+    },
+    "environmentName": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Environment name for resource tagging"
+      }
+    },
+    "resourceToken": {
+      "type": "string",
+      "metadata": {
+        "description": "Resource token for unique naming"
+      }
+    }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Network/virtualNetworks",
+      "apiVersion": "2024-01-01",
+      "name": "[format('az-vnet-{0}-{1}-{2}', parameters('locationSuffix'), parameters('networkCategory'), parameters('resourceToken'))]",
+      "location": "[parameters('location')]",
+      "tags": {
+        "azd-env-name": "[parameters('environmentName')]"
+      },
+      "properties": {
+        "addressSpace": {
+          "addressPrefixes": [
+            "[parameters('vnetAddressPrefixes')]"
+          ]
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Network/networkSecurityGroups",
+      "apiVersion": "2020-06-01",
+      "name": "[format('az-nsg-{0}-{1}-{2}', parameters('locationSuffix'), parameters('networkCategory'), parameters('resourceToken'))]",
+      "location": "[parameters('location')]",
+      "tags": {
+        "azd-env-name": "[parameters('environmentName')]"
+      },
+      "properties": {
+        "securityRules": []
+      }
+    },
+    {
+      "type": "Microsoft.Network/virtualNetworks/subnets",
+      "apiVersion": "2024-01-01",
+      "name": "[format('{0}/{1}', format('az-vnet-{0}-{1}-{2}', parameters('locationSuffix'), parameters('networkCategory'), parameters('resourceToken')), format('snet-injection-{0}-{1}-{2}', parameters('locationSuffix'), parameters('networkCategory'), parameters('resourceToken')))]",
+      "properties": {
+        "addressPrefix": "[parameters('injectionSnetAddressPrefixes')]",
+        "delegations": [
+          {
+            "name": "enterprisePolicies",
+            "properties": {
+              "serviceName": "Microsoft.PowerPlatform/enterprisePolicies"
+            }
+          }
+        ],
+        "serviceEndpoints": [],
+        "privateEndpointNetworkPolicies": "Disabled",
+        "privateLinkServiceNetworkPolicies": "Disabled",
+        "networkSecurityGroup": {
+          "id": "[resourceId('Microsoft.Network/networkSecurityGroups', format('az-nsg-{0}-{1}-{2}', parameters('locationSuffix'), parameters('networkCategory'), parameters('resourceToken')))]"
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/networkSecurityGroups', format('az-nsg-{0}-{1}-{2}', parameters('locationSuffix'), parameters('networkCategory'), parameters('resourceToken')))]",
+        "[resourceId('Microsoft.Network/virtualNetworks', format('az-vnet-{0}-{1}-{2}', parameters('locationSuffix'), parameters('networkCategory'), parameters('resourceToken')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Network/virtualNetworks/subnets",
+      "apiVersion": "2024-01-01",
+      "name": "[format('{0}/{1}', format('az-vnet-{0}-{1}-{2}', parameters('locationSuffix'), parameters('networkCategory'), parameters('resourceToken')), format('snet-pe-{0}-{1}-{2}', parameters('locationSuffix'), parameters('networkCategory'), parameters('resourceToken')))]",
+      "properties": {
+        "addressPrefix": "[parameters('privateEndpointsSnetAddressPrefixes')]",
+        "delegations": [],
+        "serviceEndpoints": [],
+        "privateEndpointNetworkPolicies": "Disabled",
+        "privateLinkServiceNetworkPolicies": "Disabled",
+        "networkSecurityGroup": {
+          "id": "[resourceId('Microsoft.Network/networkSecurityGroups', format('az-nsg-{0}-{1}-{2}', parameters('locationSuffix'), parameters('networkCategory'), parameters('resourceToken')))]"
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/virtualNetworks/subnets', format('az-vnet-{0}-{1}-{2}', parameters('locationSuffix'), parameters('networkCategory'), parameters('resourceToken')), format('snet-injection-{0}-{1}-{2}', parameters('locationSuffix'), parameters('networkCategory'), parameters('resourceToken')))]",
+        "[resourceId('Microsoft.Network/networkSecurityGroups', format('az-nsg-{0}-{1}-{2}', parameters('locationSuffix'), parameters('networkCategory'), parameters('resourceToken')))]",
+        "[resourceId('Microsoft.Network/virtualNetworks', format('az-vnet-{0}-{1}-{2}', parameters('locationSuffix'), parameters('networkCategory'), parameters('resourceToken')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Network/virtualNetworks/subnets",
+      "apiVersion": "2024-01-01",
+      "name": "[format('{0}/{1}', format('az-vnet-{0}-{1}-{2}', parameters('locationSuffix'), parameters('networkCategory'), parameters('resourceToken')), format('snet-apim-{0}-{1}-{2}', parameters('locationSuffix'), parameters('networkCategory'), parameters('resourceToken')))]",
+      "properties": {
+        "addressPrefix": "[parameters('apimSnetAddressPrefixes')]",
+        "delegations": [
+          {
+            "name": "serverFarms",
+            "properties": {
+              "serviceName": "Microsoft.Web/serverFarms"
+            }
+          }
+        ],
+        "serviceEndpoints": [
+          {
+            "service": "Microsoft.Storage",
+            "locations": [
+              "[parameters('location')]"
+            ]
+          },
+          {
+            "service": "Microsoft.Sql",
+            "locations": [
+              "[parameters('location')]"
+            ]
+          },
+          {
+            "service": "Microsoft.KeyVault",
+            "locations": [
+              "[parameters('location')]"
+            ]
+          }
+        ],
+        "privateEndpointNetworkPolicies": "Disabled",
+        "privateLinkServiceNetworkPolicies": "Disabled",
+        "networkSecurityGroup": {
+          "id": "[resourceId('Microsoft.Network/networkSecurityGroups', format('az-nsg-{0}-{1}-{2}', parameters('locationSuffix'), parameters('networkCategory'), parameters('resourceToken')))]"
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/networkSecurityGroups', format('az-nsg-{0}-{1}-{2}', parameters('locationSuffix'), parameters('networkCategory'), parameters('resourceToken')))]",
+        "[resourceId('Microsoft.Network/virtualNetworks/subnets', format('az-vnet-{0}-{1}-{2}', parameters('locationSuffix'), parameters('networkCategory'), parameters('resourceToken')), format('snet-pe-{0}-{1}-{2}', parameters('locationSuffix'), parameters('networkCategory'), parameters('resourceToken')))]",
+        "[resourceId('Microsoft.Network/virtualNetworks', format('az-vnet-{0}-{1}-{2}', parameters('locationSuffix'), parameters('networkCategory'), parameters('resourceToken')))]"
+      ]
+    }
+  ],
+  "outputs": {
+    "vnetId": {
+      "type": "string",
+      "value": "[resourceId('Microsoft.Network/virtualNetworks', format('az-vnet-{0}-{1}-{2}', parameters('locationSuffix'), parameters('networkCategory'), parameters('resourceToken')))]"
+    },
+    "vnetName": {
+      "type": "string",
+      "value": "[format('az-vnet-{0}-{1}-{2}', parameters('locationSuffix'), parameters('networkCategory'), parameters('resourceToken'))]"
+    },
+    "injectionSnetId": {
+      "type": "string",
+      "value": "[resourceId('Microsoft.Network/virtualNetworks/subnets', format('az-vnet-{0}-{1}-{2}', parameters('locationSuffix'), parameters('networkCategory'), parameters('resourceToken')), format('snet-injection-{0}-{1}-{2}', parameters('locationSuffix'), parameters('networkCategory'), parameters('resourceToken')))]"
+    },
+    "injectionSnetName": {
+      "type": "string",
+      "value": "[format('snet-injection-{0}-{1}-{2}', parameters('locationSuffix'), parameters('networkCategory'), parameters('resourceToken'))]"
+    },
+    "privateEndpointSnetId": {
+      "type": "string",
+      "value": "[resourceId('Microsoft.Network/virtualNetworks/subnets', format('az-vnet-{0}-{1}-{2}', parameters('locationSuffix'), parameters('networkCategory'), parameters('resourceToken')), format('snet-pe-{0}-{1}-{2}', parameters('locationSuffix'), parameters('networkCategory'), parameters('resourceToken')))]"
+    },
+    "privateEndpointSnetName": {
+      "type": "string",
+      "value": "[format('snet-pe-{0}-{1}-{2}', parameters('locationSuffix'), parameters('networkCategory'), parameters('resourceToken'))]"
+    },
+    "apimSnetId": {
+      "type": "string",
+      "value": "[resourceId('Microsoft.Network/virtualNetworks/subnets', format('az-vnet-{0}-{1}-{2}', parameters('locationSuffix'), parameters('networkCategory'), parameters('resourceToken')), format('snet-apim-{0}-{1}-{2}', parameters('locationSuffix'), parameters('networkCategory'), parameters('resourceToken')))]"
+    },
+    "apimSnetName": {
+      "type": "string",
+      "value": "[format('snet-apim-{0}-{1}-{2}', parameters('locationSuffix'), parameters('networkCategory'), parameters('resourceToken'))]"
+    }
+  }
+}

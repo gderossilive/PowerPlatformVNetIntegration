@@ -1,9 +1,4 @@
 /* Parameters */
-@minLength(1)
-@maxLength(50)
-@description('Name of the Power Platform environment to integrate with the network resources')
-param powerPlatformEnvironmentName string
-
 @allowed([
   'primary'
   'secondary'
@@ -26,13 +21,16 @@ param locationSuffix string = 'WE'
 param location string = 'westeurope'
 
 @description('Address prefixes for the virtual network')
-param vnetAddressPrefixes string = '10.10.0.0/23'
+param vnetAddressPrefixes string = '10.10.0.0/21'
 
 @description('Address prefixes for the subnet used for injection')
 param injectionSnetAddressPrefixes string = '10.10.0.0/24'
 
 @description('Address prefixes for the subnet used for private endpoints')
 param privateEndpointsSnetAddressPrefixes string = '10.10.1.0/24'
+
+@description('Address prefixes for the subnet used for API Management')
+param apimSnetAddressPrefixes string = '10.10.2.0/24'
 
 @description('Environment name for resource tagging')
 param environmentName string = ''
@@ -93,7 +91,7 @@ resource injectionSnet 'Microsoft.Network/virtualNetworks/subnets@2024-01-01' = 
   }
 }
 
-// Private Endpoint Subnet
+// Private Endpoint Subnet (for private endpoints only)
 resource privateEndpointSnet 'Microsoft.Network/virtualNetworks/subnets@2024-01-01' = {
   name: 'snet-pe-${locationSuffix}-${networkCategory}-${resourceToken}'
   parent: virtualNetwork
@@ -112,6 +110,51 @@ resource privateEndpointSnet 'Microsoft.Network/virtualNetworks/subnets@2024-01-
   }
 }
 
+// API Management Subnet
+resource apimSnet 'Microsoft.Network/virtualNetworks/subnets@2024-01-01' = {
+  name: 'snet-apim-${locationSuffix}-${networkCategory}-${resourceToken}'
+  parent: virtualNetwork
+  dependsOn: [
+    privateEndpointSnet
+  ]
+  properties: {
+    addressPrefix: apimSnetAddressPrefixes
+    delegations: [
+      {
+        name: 'serverFarms'
+        properties: {
+          serviceName: 'Microsoft.Web/serverFarms'
+        }
+      }
+    ]
+    serviceEndpoints: [
+      {
+        service: 'Microsoft.Storage'
+        locations: [
+          location
+        ]
+      }
+      {
+        service: 'Microsoft.Sql'
+        locations: [
+          location
+        ]
+      }
+      {
+        service: 'Microsoft.KeyVault'
+        locations: [
+          location
+        ]
+      }
+    ]
+    privateEndpointNetworkPolicies: 'Disabled'
+    privateLinkServiceNetworkPolicies: 'Disabled'
+    networkSecurityGroup: {
+      id: networkSecurityGroup.id
+    }
+  }
+}
+
 /* Outputs */
 output vnetId string = virtualNetwork.id
 output vnetName string = virtualNetwork.name
@@ -119,3 +162,5 @@ output injectionSnetId string = injectionSnet.id
 output injectionSnetName string = injectionSnet.name
 output privateEndpointSnetId string = privateEndpointSnet.id
 output privateEndpointSnetName string = privateEndpointSnet.name
+output apimSnetId string = apimSnet.id
+output apimSnetName string = apimSnet.name

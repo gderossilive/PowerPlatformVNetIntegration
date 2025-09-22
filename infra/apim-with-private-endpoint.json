@@ -1,0 +1,159 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.37.4.10188",
+      "templateHash": "12622135481042956490"
+    }
+  },
+  "parameters": {
+    "apimName": {
+      "type": "string"
+    },
+    "location": {
+      "type": "string",
+      "defaultValue": "westeurope"
+    },
+    "privateEndpointSubnetId": {
+      "type": "string"
+    },
+    "apimSubnetId": {
+      "type": "string"
+    },
+    "vnetId": {
+      "type": "string"
+    },
+    "publisherEmail": {
+      "type": "string"
+    },
+    "publisherName": {
+      "type": "string"
+    }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.ApiManagement/service",
+      "apiVersion": "2024-06-01-preview",
+      "name": "[parameters('apimName')]",
+      "location": "[parameters('location')]",
+      "sku": {
+        "name": "StandardV2",
+        "capacity": 1
+      },
+      "properties": {
+        "publisherEmail": "[parameters('publisherEmail')]",
+        "publisherName": "[parameters('publisherName')]",
+        "notificationSenderEmail": "apimgmt-noreply@mail.windowsazure.com",
+        "virtualNetworkConfiguration": {
+          "subnetResourceId": "[parameters('apimSubnetId')]"
+        },
+        "customProperties": {
+          "Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Protocols.Tls10": "False",
+          "Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Protocols.Tls11": "False",
+          "Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Backend.Protocols.Tls10": "False",
+          "Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Backend.Protocols.Tls11": "False",
+          "Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Backend.Protocols.Ssl30": "False",
+          "Microsoft.WindowsAzure.ApiManagement.Gateway.Protocols.Server.Http2": "False",
+          "Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Protocols.Ssl30": "False",
+          "Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Ciphers.TripleDes168": "False"
+        },
+        "virtualNetworkType": "External",
+        "natGatewayState": "Enabled",
+        "apiVersionConstraint": {},
+        "publicNetworkAccess": "Disabled",
+        "legacyPortalStatus": "Disabled",
+        "developerPortalStatus": "Disabled",
+        "releaseChannel": "Default"
+      }
+    },
+    {
+      "type": "Microsoft.Network/privateEndpoints",
+      "apiVersion": "2024-01-01",
+      "name": "[format('{0}-pe', parameters('apimName'))]",
+      "location": "[parameters('location')]",
+      "properties": {
+        "subnet": {
+          "id": "[parameters('privateEndpointSubnetId')]"
+        },
+        "privateLinkServiceConnections": [
+          {
+            "name": "[format('{0}-plsc', parameters('apimName'))]",
+            "properties": {
+              "privateLinkServiceId": "[resourceId('Microsoft.ApiManagement/service', parameters('apimName'))]",
+              "groupIds": [
+                "Gateway"
+              ]
+            }
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.ApiManagement/service', parameters('apimName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Network/privateDnsZones",
+      "apiVersion": "2024-06-01",
+      "name": "privatelink.azure-api.net",
+      "location": "global"
+    },
+    {
+      "type": "Microsoft.Network/privateDnsZones/virtualNetworkLinks",
+      "apiVersion": "2024-06-01",
+      "name": "[format('{0}/{1}', 'privatelink.azure-api.net', format('{0}-vnet-link', parameters('apimName')))]",
+      "location": "global",
+      "properties": {
+        "registrationEnabled": false,
+        "virtualNetwork": {
+          "id": "[parameters('vnetId')]"
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/privateDnsZones', 'privatelink.azure-api.net')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Network/privateEndpoints/privateDnsZoneGroups",
+      "apiVersion": "2024-01-01",
+      "name": "[format('{0}/{1}', format('{0}-pe', parameters('apimName')), 'default')]",
+      "properties": {
+        "privateDnsZoneConfigs": [
+          {
+            "name": "privatelink-azure-api-net",
+            "properties": {
+              "privateDnsZoneId": "[resourceId('Microsoft.Network/privateDnsZones', 'privatelink.azure-api.net')]"
+            }
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/privateDnsZones', 'privatelink.azure-api.net')]",
+        "[resourceId('Microsoft.Network/privateEndpoints', format('{0}-pe', parameters('apimName')))]"
+      ]
+    }
+  ],
+  "outputs": {
+    "apimName": {
+      "type": "string",
+      "value": "[parameters('apimName')]"
+    },
+    "apimId": {
+      "type": "string",
+      "value": "[resourceId('Microsoft.ApiManagement/service', parameters('apimName'))]"
+    },
+    "privateEndpointId": {
+      "type": "string",
+      "value": "[resourceId('Microsoft.Network/privateEndpoints', format('{0}-pe', parameters('apimName')))]"
+    },
+    "privateDnsZoneId": {
+      "type": "string",
+      "value": "[resourceId('Microsoft.Network/privateDnsZones', 'privatelink.azure-api.net')]"
+    },
+    "privateDnsZoneName": {
+      "type": "string",
+      "value": "privatelink.azure-api.net"
+    }
+  }
+}

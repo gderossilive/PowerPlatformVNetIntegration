@@ -1,0 +1,943 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2018-05-01/subscriptionDeploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.37.4.10188",
+      "templateHash": "13568879911206921640"
+    }
+  },
+  "parameters": {
+    "environmentName": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Environment name for resource tagging"
+      }
+    },
+    "resourceGroupName": {
+      "type": "string",
+      "metadata": {
+        "description": "Resource group name"
+      }
+    },
+    "environmentGroupName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 50,
+      "metadata": {
+        "description": "Name of the Power Platform environment group considered for the VNet integration enterprise policy"
+      }
+    },
+    "azureLocation": {
+      "type": "string",
+      "allowedValues": [
+        "eastus",
+        "westus",
+        "southafricanorth",
+        "southafricawest",
+        "uksouth",
+        "ukwest",
+        "japaneast",
+        "japanwest",
+        "centralindia",
+        "southindia",
+        "francecentral",
+        "francesouth",
+        "westeurope",
+        "northeurope",
+        "germanynorth",
+        "germanywestcentral",
+        "switzerlandnorth",
+        "switzerlandwest",
+        "canadacentral",
+        "canadaeast",
+        "brazilsouth",
+        "southcentralus",
+        "australiasoutheast",
+        "australiaeast",
+        "eastasia",
+        "southeastasia",
+        "uaecentral",
+        "uaenorth",
+        "koreasouth",
+        "koreacentral",
+        "norwaywest",
+        "norwayeast",
+        "singapore",
+        "swedencentral"
+      ],
+      "metadata": {
+        "description": "Primary location for all resources"
+      }
+    },
+    "enterprisePolicyLocation": {
+      "type": "string",
+      "allowedValues": [
+        "unitedstates",
+        "canada",
+        "uk",
+        "japan",
+        "southafrica",
+        "india",
+        "france",
+        "europe",
+        "germany",
+        "switzerland",
+        "brazil",
+        "australia",
+        "asia",
+        "uae",
+        "korea",
+        "norway",
+        "singapore",
+        "sweden"
+      ],
+      "metadata": {
+        "description": "Location for the Enterprise policy"
+      }
+    },
+    "deployEnterprisePolicy": {
+      "type": "bool",
+      "defaultValue": true,
+      "metadata": {
+        "description": "Boolean to define if the Enterprise Policy resource should be deployed - to avoid errors if the enterprise policy is already linked to Power Platforme environments"
+      }
+    },
+    "apimPublisherEmail": {
+      "type": "string",
+      "defaultValue": "admin@contoso.com",
+      "metadata": {
+        "description": "Publisher email for APIM"
+      }
+    },
+    "apimPublisherName": {
+      "type": "string",
+      "defaultValue": "Contoso Admin",
+      "metadata": {
+        "description": "Publisher name for APIM"
+      }
+    },
+    "timeStamp": {
+      "type": "string",
+      "defaultValue": "[utcNow()]"
+    }
+  },
+  "variables": {
+    "resourceToken": "[substring(uniqueString(parameters('timeStamp')), 0, 3)]",
+    "rgName": "[format('{0}-{1}', parameters('resourceGroupName'), variables('resourceToken'))]",
+    "failoverLocations": {
+      "eastus": "westus",
+      "westus": "eastus",
+      "southafricanorth": "southafricawest",
+      "southafricawest": "southafricanorth",
+      "uksouth": "ukwest",
+      "ukwest": "uksouth",
+      "japaneast": "japanwest",
+      "japanwest": "japaneast",
+      "centralindia": "southindia",
+      "southindia": "centralindia",
+      "francecentral": "francesouth",
+      "francesouth": "francecentral",
+      "westeurope": "northeurope",
+      "northeurope": "westeurope",
+      "germanynorth": "germanywestcentral",
+      "germanywestcentral": "germanynorth",
+      "switzerlandnorth": "switzerlandwest",
+      "switzerlandwest": "switzerlandnorth",
+      "canadacentral": "canadaeast",
+      "canadaeast": "canadacentral",
+      "brazilsouth": "southcentralus",
+      "southcentralus": "brazilsouth",
+      "australiasoutheast": "australiaeast",
+      "australiaeast": "australiasoutheast",
+      "eastasia": "southeastasia",
+      "southeastasia": "eastasia",
+      "uaecentral": "uaenorth",
+      "uaenorth": "uaecentral",
+      "koreasouth": "koreacentral",
+      "koreacentral": "koreasouth",
+      "norwaywest": "norwayeast",
+      "norwayeast": "norwaywest",
+      "singapore": "southeastasia",
+      "swedencentral": "northeurope"
+    },
+    "failoverLocation": "[variables('failoverLocations')[parameters('azureLocation')]]",
+    "networksConfiguration": [
+      {
+        "category": "primary",
+        "location": "[parameters('azureLocation')]",
+        "suffix": "WE",
+        "vnetAddressPrefixes": "10.10.0.0/21",
+        "injectionSnetAddressPrefixes": "10.10.0.0/24",
+        "privateEndpointsSnetAddressPrefixes": "10.10.1.0/24",
+        "apimSnetAddressPrefixes": "10.10.2.0/24"
+      },
+      {
+        "category": "secondary",
+        "location": "[variables('failoverLocation')]",
+        "suffix": "NE",
+        "vnetAddressPrefixes": "10.20.0.0/21",
+        "injectionSnetAddressPrefixes": "10.20.0.0/24",
+        "privateEndpointsSnetAddressPrefixes": "10.20.1.0/24",
+        "apimSnetAddressPrefixes": "10.20.2.0/24"
+      }
+    ],
+    "APIMName": "[format('az-apim-{0}', variables('resourceToken'))]",
+    "idName": "[format('id-{0}', variables('resourceToken'))]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Resources/resourceGroups",
+      "apiVersion": "2021-04-01",
+      "name": "[variables('rgName')]",
+      "location": "[parameters('azureLocation')]",
+      "tags": {
+        "azd-env-name": "[parameters('environmentName')]"
+      }
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2022-09-01",
+      "name": "minimal-identity",
+      "resourceGroup": "[variables('rgName')]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "identityName": {
+            "value": "[variables('idName')]"
+          },
+          "location": {
+            "value": "[parameters('azureLocation')]"
+          },
+          "environmentName": {
+            "value": "[parameters('environmentName')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.37.4.10188",
+              "templateHash": "13752307364666434052"
+            }
+          },
+          "parameters": {
+            "identityName": {
+              "type": "string"
+            },
+            "location": {
+              "type": "string"
+            },
+            "environmentName": {
+              "type": "string"
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
+              "apiVersion": "2023-01-31",
+              "name": "[parameters('identityName')]",
+              "location": "[parameters('location')]",
+              "tags": {
+                "azd-env-name": "[parameters('environmentName')]"
+              }
+            }
+          ],
+          "outputs": {
+            "clientId": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('identityName')), '2023-01-31').clientId]"
+            },
+            "principalId": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('identityName')), '2023-01-31').principalId]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', variables('rgName'))]"
+      ]
+    },
+    {
+      "copy": {
+        "name": "networks",
+        "count": "[length(variables('networksConfiguration'))]"
+      },
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2022-09-01",
+      "name": "[format('network-{0}', variables('networksConfiguration')[copyIndex()].category)]",
+      "resourceGroup": "[variables('rgName')]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "powerPlatformEnvironmentName": {
+            "value": "[parameters('environmentGroupName')]"
+          },
+          "networkCategory": {
+            "value": "[variables('networksConfiguration')[copyIndex()].category]"
+          },
+          "locationSuffix": {
+            "value": "[variables('networksConfiguration')[copyIndex()].suffix]"
+          },
+          "location": {
+            "value": "[variables('networksConfiguration')[copyIndex()].location]"
+          },
+          "vnetAddressPrefixes": {
+            "value": "[variables('networksConfiguration')[copyIndex()].vnetAddressPrefixes]"
+          },
+          "injectionSnetAddressPrefixes": {
+            "value": "[variables('networksConfiguration')[copyIndex()].injectionSnetAddressPrefixes]"
+          },
+          "privateEndpointsSnetAddressPrefixes": {
+            "value": "[variables('networksConfiguration')[copyIndex()].privateEndpointsSnetAddressPrefixes]"
+          },
+          "apimSnetAddressPrefixes": {
+            "value": "[variables('networksConfiguration')[copyIndex()].apimSnetAddressPrefixes]"
+          },
+          "environmentName": {
+            "value": "[parameters('environmentName')]"
+          },
+          "resourceToken": {
+            "value": "[variables('resourceToken')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.37.4.10188",
+              "templateHash": "295962529476562516"
+            }
+          },
+          "parameters": {
+            "powerPlatformEnvironmentName": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 50,
+              "metadata": {
+                "description": "Name of the Power Platform environment to integrate with the network resources"
+              }
+            },
+            "networkCategory": {
+              "type": "string",
+              "allowedValues": [
+                "primary",
+                "secondary"
+              ],
+              "metadata": {
+                "description": "Category of the network resources to configure"
+              }
+            },
+            "locationSuffix": {
+              "type": "string",
+              "defaultValue": "WE",
+              "allowedValues": [
+                "WE",
+                "NE"
+              ],
+              "metadata": {
+                "description": "Suffix for the resources in the case of multiple networks"
+              }
+            },
+            "location": {
+              "type": "string",
+              "defaultValue": "westeurope",
+              "allowedValues": [
+                "westeurope",
+                "northeurope"
+              ],
+              "metadata": {
+                "description": "Location for all resources"
+              }
+            },
+            "vnetAddressPrefixes": {
+              "type": "string",
+              "defaultValue": "10.10.0.0/21",
+              "metadata": {
+                "description": "Address prefixes for the virtual network"
+              }
+            },
+            "injectionSnetAddressPrefixes": {
+              "type": "string",
+              "defaultValue": "10.10.0.0/24",
+              "metadata": {
+                "description": "Address prefixes for the subnet used for injection"
+              }
+            },
+            "privateEndpointsSnetAddressPrefixes": {
+              "type": "string",
+              "defaultValue": "10.10.1.0/24",
+              "metadata": {
+                "description": "Address prefixes for the subnet used for private endpoints"
+              }
+            },
+            "apimSnetAddressPrefixes": {
+              "type": "string",
+              "defaultValue": "10.10.2.0/24",
+              "metadata": {
+                "description": "Address prefixes for the subnet used for API Management"
+              }
+            },
+            "environmentName": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Environment name for resource tagging"
+              }
+            },
+            "resourceToken": {
+              "type": "string",
+              "metadata": {
+                "description": "Resource token for unique naming"
+              }
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Network/virtualNetworks",
+              "apiVersion": "2024-01-01",
+              "name": "[format('az-vnet-{0}-{1}-{2}', parameters('locationSuffix'), parameters('networkCategory'), parameters('resourceToken'))]",
+              "location": "[parameters('location')]",
+              "tags": {
+                "azd-env-name": "[parameters('environmentName')]"
+              },
+              "properties": {
+                "addressSpace": {
+                  "addressPrefixes": [
+                    "[parameters('vnetAddressPrefixes')]"
+                  ]
+                }
+              }
+            },
+            {
+              "type": "Microsoft.Network/networkSecurityGroups",
+              "apiVersion": "2020-06-01",
+              "name": "[format('az-nsg-{0}-{1}-{2}', parameters('locationSuffix'), parameters('networkCategory'), parameters('resourceToken'))]",
+              "location": "[parameters('location')]",
+              "tags": {
+                "azd-env-name": "[parameters('environmentName')]"
+              },
+              "properties": {
+                "securityRules": []
+              }
+            },
+            {
+              "type": "Microsoft.Network/virtualNetworks/subnets",
+              "apiVersion": "2024-01-01",
+              "name": "[format('{0}/{1}', format('az-vnet-{0}-{1}-{2}', parameters('locationSuffix'), parameters('networkCategory'), parameters('resourceToken')), format('snet-injection-{0}-{1}-{2}', parameters('locationSuffix'), parameters('networkCategory'), parameters('resourceToken')))]",
+              "properties": {
+                "addressPrefix": "[parameters('injectionSnetAddressPrefixes')]",
+                "delegations": [
+                  {
+                    "name": "enterprisePolicies",
+                    "properties": {
+                      "serviceName": "Microsoft.PowerPlatform/enterprisePolicies"
+                    }
+                  }
+                ],
+                "serviceEndpoints": [],
+                "privateEndpointNetworkPolicies": "Disabled",
+                "privateLinkServiceNetworkPolicies": "Disabled",
+                "networkSecurityGroup": {
+                  "id": "[resourceId('Microsoft.Network/networkSecurityGroups', format('az-nsg-{0}-{1}-{2}', parameters('locationSuffix'), parameters('networkCategory'), parameters('resourceToken')))]"
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Network/networkSecurityGroups', format('az-nsg-{0}-{1}-{2}', parameters('locationSuffix'), parameters('networkCategory'), parameters('resourceToken')))]",
+                "[resourceId('Microsoft.Network/virtualNetworks', format('az-vnet-{0}-{1}-{2}', parameters('locationSuffix'), parameters('networkCategory'), parameters('resourceToken')))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Network/virtualNetworks/subnets",
+              "apiVersion": "2024-01-01",
+              "name": "[format('{0}/{1}', format('az-vnet-{0}-{1}-{2}', parameters('locationSuffix'), parameters('networkCategory'), parameters('resourceToken')), format('snet-pe-{0}-{1}-{2}', parameters('locationSuffix'), parameters('networkCategory'), parameters('resourceToken')))]",
+              "properties": {
+                "addressPrefix": "[parameters('privateEndpointsSnetAddressPrefixes')]",
+                "delegations": [],
+                "serviceEndpoints": [],
+                "privateEndpointNetworkPolicies": "Disabled",
+                "privateLinkServiceNetworkPolicies": "Disabled",
+                "networkSecurityGroup": {
+                  "id": "[resourceId('Microsoft.Network/networkSecurityGroups', format('az-nsg-{0}-{1}-{2}', parameters('locationSuffix'), parameters('networkCategory'), parameters('resourceToken')))]"
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Network/virtualNetworks/subnets', format('az-vnet-{0}-{1}-{2}', parameters('locationSuffix'), parameters('networkCategory'), parameters('resourceToken')), format('snet-injection-{0}-{1}-{2}', parameters('locationSuffix'), parameters('networkCategory'), parameters('resourceToken')))]",
+                "[resourceId('Microsoft.Network/networkSecurityGroups', format('az-nsg-{0}-{1}-{2}', parameters('locationSuffix'), parameters('networkCategory'), parameters('resourceToken')))]",
+                "[resourceId('Microsoft.Network/virtualNetworks', format('az-vnet-{0}-{1}-{2}', parameters('locationSuffix'), parameters('networkCategory'), parameters('resourceToken')))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Network/virtualNetworks/subnets",
+              "apiVersion": "2024-01-01",
+              "name": "[format('{0}/{1}', format('az-vnet-{0}-{1}-{2}', parameters('locationSuffix'), parameters('networkCategory'), parameters('resourceToken')), format('snet-apim-{0}-{1}-{2}', parameters('locationSuffix'), parameters('networkCategory'), parameters('resourceToken')))]",
+              "properties": {
+                "addressPrefix": "[parameters('apimSnetAddressPrefixes')]",
+                "delegations": [
+                  {
+                    "name": "serverFarms",
+                    "properties": {
+                      "serviceName": "Microsoft.Web/serverFarms"
+                    }
+                  }
+                ],
+                "serviceEndpoints": [
+                  {
+                    "service": "Microsoft.Storage",
+                    "locations": [
+                      "[parameters('location')]"
+                    ]
+                  },
+                  {
+                    "service": "Microsoft.Sql",
+                    "locations": [
+                      "[parameters('location')]"
+                    ]
+                  },
+                  {
+                    "service": "Microsoft.KeyVault",
+                    "locations": [
+                      "[parameters('location')]"
+                    ]
+                  }
+                ],
+                "privateEndpointNetworkPolicies": "Disabled",
+                "privateLinkServiceNetworkPolicies": "Disabled",
+                "networkSecurityGroup": {
+                  "id": "[resourceId('Microsoft.Network/networkSecurityGroups', format('az-nsg-{0}-{1}-{2}', parameters('locationSuffix'), parameters('networkCategory'), parameters('resourceToken')))]"
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Network/networkSecurityGroups', format('az-nsg-{0}-{1}-{2}', parameters('locationSuffix'), parameters('networkCategory'), parameters('resourceToken')))]",
+                "[resourceId('Microsoft.Network/virtualNetworks/subnets', format('az-vnet-{0}-{1}-{2}', parameters('locationSuffix'), parameters('networkCategory'), parameters('resourceToken')), format('snet-pe-{0}-{1}-{2}', parameters('locationSuffix'), parameters('networkCategory'), parameters('resourceToken')))]",
+                "[resourceId('Microsoft.Network/virtualNetworks', format('az-vnet-{0}-{1}-{2}', parameters('locationSuffix'), parameters('networkCategory'), parameters('resourceToken')))]"
+              ]
+            }
+          ],
+          "outputs": {
+            "vnetId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.Network/virtualNetworks', format('az-vnet-{0}-{1}-{2}', parameters('locationSuffix'), parameters('networkCategory'), parameters('resourceToken')))]"
+            },
+            "vnetName": {
+              "type": "string",
+              "value": "[format('az-vnet-{0}-{1}-{2}', parameters('locationSuffix'), parameters('networkCategory'), parameters('resourceToken'))]"
+            },
+            "injectionSnetId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.Network/virtualNetworks/subnets', format('az-vnet-{0}-{1}-{2}', parameters('locationSuffix'), parameters('networkCategory'), parameters('resourceToken')), format('snet-injection-{0}-{1}-{2}', parameters('locationSuffix'), parameters('networkCategory'), parameters('resourceToken')))]"
+            },
+            "injectionSnetName": {
+              "type": "string",
+              "value": "[format('snet-injection-{0}-{1}-{2}', parameters('locationSuffix'), parameters('networkCategory'), parameters('resourceToken'))]"
+            },
+            "privateEndpointSnetId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.Network/virtualNetworks/subnets', format('az-vnet-{0}-{1}-{2}', parameters('locationSuffix'), parameters('networkCategory'), parameters('resourceToken')), format('snet-pe-{0}-{1}-{2}', parameters('locationSuffix'), parameters('networkCategory'), parameters('resourceToken')))]"
+            },
+            "privateEndpointSnetName": {
+              "type": "string",
+              "value": "[format('snet-pe-{0}-{1}-{2}', parameters('locationSuffix'), parameters('networkCategory'), parameters('resourceToken'))]"
+            },
+            "apimSnetId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.Network/virtualNetworks/subnets', format('az-vnet-{0}-{1}-{2}', parameters('locationSuffix'), parameters('networkCategory'), parameters('resourceToken')), format('snet-apim-{0}-{1}-{2}', parameters('locationSuffix'), parameters('networkCategory'), parameters('resourceToken')))]"
+            },
+            "apimSnetName": {
+              "type": "string",
+              "value": "[format('snet-apim-{0}-{1}-{2}', parameters('locationSuffix'), parameters('networkCategory'), parameters('resourceToken'))]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', variables('rgName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2022-09-01",
+      "name": "[variables('APIMName')]",
+      "resourceGroup": "[variables('rgName')]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "apimName": {
+            "value": "[variables('APIMName')]"
+          },
+          "location": {
+            "value": "[parameters('azureLocation')]"
+          },
+          "privateEndpointSubnetId": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', format('network-{0}', variables('networksConfiguration')[0].category)), '2022-09-01').outputs.privateEndpointSnetId.value]"
+          },
+          "apimSubnetId": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', format('network-{0}', variables('networksConfiguration')[0].category)), '2022-09-01').outputs.apimSnetId.value]"
+          },
+          "vnetId": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', format('network-{0}', variables('networksConfiguration')[0].category)), '2022-09-01').outputs.vnetId.value]"
+          },
+          "publisherEmail": {
+            "value": "[parameters('apimPublisherEmail')]"
+          },
+          "publisherName": {
+            "value": "[parameters('apimPublisherName')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.37.4.10188",
+              "templateHash": "12622135481042956490"
+            }
+          },
+          "parameters": {
+            "apimName": {
+              "type": "string"
+            },
+            "location": {
+              "type": "string",
+              "defaultValue": "westeurope"
+            },
+            "privateEndpointSubnetId": {
+              "type": "string"
+            },
+            "apimSubnetId": {
+              "type": "string"
+            },
+            "vnetId": {
+              "type": "string"
+            },
+            "publisherEmail": {
+              "type": "string"
+            },
+            "publisherName": {
+              "type": "string"
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.ApiManagement/service",
+              "apiVersion": "2024-06-01-preview",
+              "name": "[parameters('apimName')]",
+              "location": "[parameters('location')]",
+              "sku": {
+                "name": "StandardV2",
+                "capacity": 1
+              },
+              "properties": {
+                "publisherEmail": "[parameters('publisherEmail')]",
+                "publisherName": "[parameters('publisherName')]",
+                "notificationSenderEmail": "apimgmt-noreply@mail.windowsazure.com",
+                "virtualNetworkConfiguration": {
+                  "subnetResourceId": "[parameters('apimSubnetId')]"
+                },
+                "customProperties": {
+                  "Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Protocols.Tls10": "False",
+                  "Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Protocols.Tls11": "False",
+                  "Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Backend.Protocols.Tls10": "False",
+                  "Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Backend.Protocols.Tls11": "False",
+                  "Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Backend.Protocols.Ssl30": "False",
+                  "Microsoft.WindowsAzure.ApiManagement.Gateway.Protocols.Server.Http2": "False",
+                  "Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Protocols.Ssl30": "False",
+                  "Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Ciphers.TripleDes168": "False"
+                },
+                "virtualNetworkType": "External",
+                "natGatewayState": "Enabled",
+                "apiVersionConstraint": {},
+                "publicNetworkAccess": "Disabled",
+                "legacyPortalStatus": "Disabled",
+                "developerPortalStatus": "Disabled",
+                "releaseChannel": "Default"
+              }
+            },
+            {
+              "type": "Microsoft.Network/privateEndpoints",
+              "apiVersion": "2024-01-01",
+              "name": "[format('{0}-pe', parameters('apimName'))]",
+              "location": "[parameters('location')]",
+              "properties": {
+                "subnet": {
+                  "id": "[parameters('privateEndpointSubnetId')]"
+                },
+                "privateLinkServiceConnections": [
+                  {
+                    "name": "[format('{0}-plsc', parameters('apimName'))]",
+                    "properties": {
+                      "privateLinkServiceId": "[resourceId('Microsoft.ApiManagement/service', parameters('apimName'))]",
+                      "groupIds": [
+                        "Gateway"
+                      ]
+                    }
+                  }
+                ]
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ApiManagement/service', parameters('apimName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Network/privateDnsZones",
+              "apiVersion": "2024-06-01",
+              "name": "privatelink.azure-api.net",
+              "location": "global"
+            },
+            {
+              "type": "Microsoft.Network/privateDnsZones/virtualNetworkLinks",
+              "apiVersion": "2024-06-01",
+              "name": "[format('{0}/{1}', 'privatelink.azure-api.net', format('{0}-vnet-link', parameters('apimName')))]",
+              "location": "global",
+              "properties": {
+                "registrationEnabled": false,
+                "virtualNetwork": {
+                  "id": "[parameters('vnetId')]"
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Network/privateDnsZones', 'privatelink.azure-api.net')]"
+              ]
+            },
+            {
+              "type": "Microsoft.Network/privateEndpoints/privateDnsZoneGroups",
+              "apiVersion": "2024-01-01",
+              "name": "[format('{0}/{1}', format('{0}-pe', parameters('apimName')), 'default')]",
+              "properties": {
+                "privateDnsZoneConfigs": [
+                  {
+                    "name": "privatelink-azure-api-net",
+                    "properties": {
+                      "privateDnsZoneId": "[resourceId('Microsoft.Network/privateDnsZones', 'privatelink.azure-api.net')]"
+                    }
+                  }
+                ]
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Network/privateDnsZones', 'privatelink.azure-api.net')]",
+                "[resourceId('Microsoft.Network/privateEndpoints', format('{0}-pe', parameters('apimName')))]"
+              ]
+            }
+          ],
+          "outputs": {
+            "apimName": {
+              "type": "string",
+              "value": "[parameters('apimName')]"
+            },
+            "apimId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.ApiManagement/service', parameters('apimName'))]"
+            },
+            "privateEndpointId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.Network/privateEndpoints', format('{0}-pe', parameters('apimName')))]"
+            },
+            "privateDnsZoneId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.Network/privateDnsZones', 'privatelink.azure-api.net')]"
+            },
+            "privateDnsZoneName": {
+              "type": "string",
+              "value": "privatelink.azure-api.net"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', format('network-{0}', variables('networksConfiguration')[0].category))]",
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', format('network-{0}', variables('networksConfiguration')[0].category))]",
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', format('network-{0}', variables('networksConfiguration')[0].category))]",
+        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', variables('rgName'))]"
+      ]
+    },
+    {
+      "condition": "[parameters('deployEnterprisePolicy')]",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2022-09-01",
+      "name": "enterprise-policy",
+      "resourceGroup": "[variables('rgName')]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "environmentGroupName": {
+            "value": "[parameters('environmentGroupName')]"
+          },
+          "location": {
+            "value": "[parameters('enterprisePolicyLocation')]"
+          },
+          "vnetSubnets": {
+            "value": [
+              {
+                "id": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', format('network-{0}', variables('networksConfiguration')[0].category)), '2022-09-01').outputs.vnetId.value]",
+                "subnet": {
+                  "name": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', format('network-{0}', variables('networksConfiguration')[0].category)), '2022-09-01').outputs.injectionSnetName.value]"
+                }
+              },
+              {
+                "id": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', format('network-{0}', variables('networksConfiguration')[1].category)), '2022-09-01').outputs.vnetId.value]",
+                "subnet": {
+                  "name": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', format('network-{0}', variables('networksConfiguration')[1].category)), '2022-09-01').outputs.injectionSnetName.value]"
+                }
+              }
+            ]
+          },
+          "suffix": {
+            "value": "[variables('resourceToken')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.37.4.10188",
+              "templateHash": "3189491302359406382"
+            }
+          },
+          "parameters": {
+            "environmentGroupName": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 50,
+              "metadata": {
+                "description": "Name of the Power Platform environment group considered in the infrastructure"
+              }
+            },
+            "location": {
+              "type": "string",
+              "minLength": 1,
+              "metadata": {
+                "description": "Location for all resources"
+              }
+            },
+            "suffix": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 3
+            },
+            "vnetSubnets": {
+              "type": "array",
+              "metadata": {
+                "description": "Array of objects with the following structure: { id: string; subnet: { name: string; } }"
+              }
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.PowerPlatform/enterprisePolicies",
+              "apiVersion": "2020-10-30-preview",
+              "name": "[format('ep-{0}-{1}', parameters('environmentGroupName'), parameters('suffix'))]",
+              "location": "[parameters('location')]",
+              "kind": "NetworkInjection",
+              "properties": {
+                "networkInjection": {
+                  "virtualNetworks": "[parameters('vnetSubnets')]"
+                }
+              }
+            }
+          ],
+          "outputs": {
+            "enterprisePolicyId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.PowerPlatform/enterprisePolicies', format('ep-{0}-{1}', parameters('environmentGroupName'), parameters('suffix')))]"
+            },
+            "enterprisePolicyName": {
+              "type": "string",
+              "value": "[format('ep-{0}-{1}', parameters('environmentGroupName'), parameters('suffix'))]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', format('network-{0}', variables('networksConfiguration')[0].category))]",
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', format('network-{0}', variables('networksConfiguration')[1].category))]",
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', format('network-{0}', variables('networksConfiguration')[1].category))]",
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', format('network-{0}', variables('networksConfiguration')[0].category))]",
+        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', variables('rgName'))]"
+      ]
+    }
+  ],
+  "outputs": {
+    "RESOURCE_GROUP_ID": {
+      "type": "string",
+      "value": "[subscriptionResourceId('Microsoft.Resources/resourceGroups', variables('rgName'))]"
+    },
+    "primaryVnetName": {
+      "type": "string",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', format('network-{0}', variables('networksConfiguration')[0].category)), '2022-09-01').outputs.vnetName.value]"
+    },
+    "primarySubnetName": {
+      "type": "string",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', format('network-{0}', variables('networksConfiguration')[0].category)), '2022-09-01').outputs.injectionSnetName.value]"
+    },
+    "failoverVnetName": {
+      "type": "string",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', format('network-{0}', variables('networksConfiguration')[1].category)), '2022-09-01').outputs.vnetName.value]"
+    },
+    "failoverSubnetName": {
+      "type": "string",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', format('network-{0}', variables('networksConfiguration')[1].category)), '2022-09-01').outputs.injectionSnetName.value]"
+    },
+    "resourceGroup": {
+      "type": "string",
+      "value": "[variables('rgName')]"
+    },
+    "apimName": {
+      "type": "string",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', variables('APIMName')), '2022-09-01').outputs.apimName.value]"
+    },
+    "apimId": {
+      "type": "string",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', variables('APIMName')), '2022-09-01').outputs.apimId.value]"
+    },
+    "apimPrivateEndpointId": {
+      "type": "string",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', variables('APIMName')), '2022-09-01').outputs.privateEndpointId.value]"
+    },
+    "apimPrivateDnsZoneId": {
+      "type": "string",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', variables('APIMName')), '2022-09-01').outputs.privateDnsZoneId.value]"
+    },
+    "apimPrivateDnsZoneName": {
+      "type": "string",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', variables('APIMName')), '2022-09-01').outputs.privateDnsZoneName.value]"
+    },
+    "privateEndpointSubnetId": {
+      "type": "string",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', format('network-{0}', variables('networksConfiguration')[0].category)), '2022-09-01').outputs.privateEndpointSnetId.value]"
+    },
+    "enterprisePolicyName": {
+      "type": "string",
+      "value": "[format('ep-{0}-{1}', parameters('environmentGroupName'), variables('resourceToken'))]"
+    },
+    "AZURE_CLIENT_ID": {
+      "type": "string",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'minimal-identity'), '2022-09-01').outputs.clientId.value]"
+    },
+    "AZURE_PRINCIPAL_ID": {
+      "type": "string",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'minimal-identity'), '2022-09-01').outputs.principalId.value]"
+    }
+  }
+}

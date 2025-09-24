@@ -5,16 +5,60 @@ This repository provides **complete end-to-end automation** for Power Platform v
 
 ## 🚀 Complete Automation Pipeline
 
-This solution provides **5 automated scripts** that handle the entire deployment lifecycle:
+### Petstore API Import (APIM)
 
-| Script | Purpose | Description |
-|--------|---------|-------------|
-| **0-CreatePowerPlatformEnvironment.ps1** | Environment Setup | Creates Power Platform environment with Dataverse |
-| **1-InfraSetup.ps1** | Infrastructure | Deploys Azure infrastructure (VNets, APIM, Private Endpoints) |
-| **2-SubnetInjectionSetup.ps1** | Network Integration | Links enterprise policy for VNet connectivity |
-| **3-CreateCustomConnector.ps1** | API Integration | Creates custom connectors from APIM APIs |
-| **4-SetupCopilotStudio.ps1** | AI Assistant | Configures Copilot Studio with connector integration |
-| **5-Cleanup.ps1** | Resource Cleanup | Safely removes all deployed resources |
+The deployment now automatically:
+
+1. Creates (or ensures) an APIM user (defaults to `petstore-user`).
+2. Imports the sample Petstore OpenAPI (https://petstore3.swagger.io/api/v3/openapi.json).
+3. Creates a subscription for that user and outputs the keys.
+
+New parameters in `infra/main.bicep`:
+
+- `petstoreUserName` (default: `petstore-user`)
+- `petstoreUserEmail` (default: inherits `apimPublisherEmail`)
+
+Outputs after deployment:
+
+- `petstoreApiName`
+- `petstoreApiId`
+- `petstoreApiSubscriptionId`
+- `petstoreApiPrimaryKey`
+- `petstoreApiSecondaryKey`
+
+You can retrieve these via `az deployment sub show` (when deploying at subscription scope) or through Azure Portal deployment outputs. Use the subscription keys when calling the Petstore API via the APIM gateway:
+
+`curl -H "Ocp-Apim-Subscription-Key: <petstoreApiPrimaryKey>" https://<apimName>.azure-api.net/petstore/` 
+
+If you prefer not to deploy the sample API, you can temporarily comment out the `petstoreApi` module block in `main.bicep`.
+
+You can now execute the full flow with a single orchestrator script or run individual steps.
+
+### Option 1: One-Click Orchestration (Recommended)
+```bash
+./RunMe.sh -n Fabrikam-Test -r westeurope -p europe --force
+```
+This performs environment creation (base), Azure infra deployment, and subnet injection linking, then instructs you on manual Dataverse / Managed Environment steps. See `scripts/README.md` for deeper script descriptions.
+
+### Option 2: Individual Script Execution
+
+| Order | Bash Script (scripts/) | Purpose | Notes |
+|-------|------------------------|---------|-------|
+| 0 | `0-CreatePowerPlatformEnvironment.sh` | Power Platform environment creation | Dataverse enablement remains manual |
+| 1 | `1-InfraSetup.sh` | Azure infra (VNets, APIM, Private Endpoint, Enterprise Policy) | Uses `azd up` |
+| 2 | `2-SubnetInjectionSetup.sh` | Enterprise policy link (Subnet Injection) | Requires environment ID & policy deployed |
+| 3 | `3-CreateCustomConnector_v2.sh` | Custom connector from APIM API | Guided manual connection creation |
+| 4 | `4-SetupCopilotStudio.sh` | Copilot Studio configuration | Optional AI integration |
+| 5 | `5-Cleanup.sh` (root) | Cleanup Azure + guidance for PP deletion | Manual PP environment delete still needed |
+
+| Supporting PowerShell | Purpose |
+|-----------------------|---------|
+| `scripts/1-SetupSubscriptionForPowerPlatform.ps1` | Preps subscription/providers (legacy) |
+| `scripts/2-SetupVnetForSubnetDelegation.ps1` | Legacy subnet delegation helper |
+| `scripts/3-CreateSubnetInjectionEnterprisePolicy.ps1` | Enterprise policy creation alt path |
+| `scripts/5-NewSubnetInjection.ps1` | Experimental subnet injection logic |
+
+Refer to `scripts/README.md` for full details and variable contracts.
 
 ## Architecture
 The solution creates a comprehensive enterprise architecture:
@@ -53,18 +97,20 @@ This repository includes a complete development environment configuration using 
 3. Wait for the container to build (first time may take a few minutes)
 4. Once ready, all tools will be available in the integrated terminal
 
-**Using PowerShell in the Dev Container:**
+**Using the Dev Container (PowerShell or Bash):**
 ```bash
-# Start PowerShell session
-pwsh
+# One-click orchestration (bash)
+./RunMe.sh -n Fabrikam-Test -r westeurope -p europe --force
 
-# Run PowerShell scripts directly
+# Or run individual bash scripts
+bash ./scripts/0-CreatePowerPlatformEnvironment.sh --force
+bash ./scripts/1-InfraSetup.sh
+bash ./scripts/2-SubnetInjectionSetup.sh
+
+# PowerShell equivalents (legacy / optional)
 pwsh ./0-CreatePowerPlatformEnvironment.ps1
 pwsh ./1-InfraSetup.ps1
 pwsh ./2-SubnetInjectionSetup.ps1
-
-# Execute PowerShell commands
-pwsh -c "Get-Date"
 ```
 
 **Manual Installation (if not using dev container):**
@@ -457,22 +503,36 @@ After deployment, verify:
 ## File Structure
 
 ```
-├── 0-CreatePowerPlatformEnvironment.ps1  # Power Platform environment creation script
-├── 1-InfraSetup.ps1                      # Main infrastructure deployment script
-├── 2-SubnetInjectionSetup.ps1            # Enterprise policy linking script
-├── 3-CreateCustomConnector.ps1           # Custom connector creation script
-├── 4-SetupCopilotStudio.ps1              # Copilot Studio integration script
-├── 5-Cleanup.ps1                         # Complete cleanup and removal script
-├── .env                                   # Environment variables
-├── azure.yaml                            # Azure Developer CLI configuration
-├── infra/                                # Bicep templates
+├── RunMe.sh                              # Orchestrator: environment + infra + subnet link
+├── 0-CreatePowerPlatformEnvironment.ps1  # PowerShell legacy env creation
+├── 1-InfraSetup.ps1                      # PowerShell infra deployment
+├── 2-SubnetInjectionSetup.ps1            # PowerShell subnet link
+├── 3-CreateCustomConnector.ps1           # PowerShell connector creation
+├── 4-SetupCopilotStudio.ps1              # PowerShell Copilot integration
+├── 5-Cleanup.ps1                         # PowerShell cleanup
+├── scripts/                              # Active bash automation scripts
+│   ├── 0-CreatePowerPlatformEnvironment.sh
+│   ├── 1-InfraSetup.sh
+│   ├── 2-SubnetInjectionSetup.sh
+│   ├── 3-CreateCustomConnector_v2.sh
+│   ├── 4-SetupCopilotStudio.sh
+│   ├── 1-SetupSubscriptionForPowerPlatform.ps1
+│   ├── 2-SetupVnetForSubnetDelegation.ps1
+│   ├── 3-CreateSubnetInjectionEnterprisePolicy.ps1
+│   ├── 5-NewSubnetInjection.ps1
+│   └── README.md
+├── infra/
 │   ├── main.bicep
 │   ├── apim-with-private-endpoint.bicep
 │   ├── vnet-subnet-with-delegation-module.bicep
 │   └── powerplatform-network-injection-enterprise-policy-module.bicep
-├── orig-scripts/                         # Original Microsoft scripts
-└── scripts/                              # Additional utility scripts
+├── azure.yaml
+├── .env
+├── orig-scripts/
+└── docs/
 ```
+
+> See `scripts/README.md` for detailed script purposes, manual steps, and troubleshooting.
 
 ## Getting Help
 

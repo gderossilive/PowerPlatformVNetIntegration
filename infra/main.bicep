@@ -87,8 +87,8 @@ param apimPublisherName string = 'Contoso Admin'
 // Removed unused location parameter for clarity
 
 /* Variables */
-param timeStamp string = utcNow()
-var resourceToken = substring(uniqueString(timeStamp),0,3)
+// Deterministic short token derived from subscription and provided RG base name
+var resourceToken = substring(uniqueString(subscription().id, resourceGroupName),0,3)
 var rgName = '${resourceGroupName}-${resourceToken}'
 
 var failoverLocations = {
@@ -208,6 +208,20 @@ module apimWithPrivateEndpoint 'apim-with-private-endpoint.bicep' = {
   }
 }
 
+// Import Petstore API & create subscription for the administrator user
+// Using default administrator user since developer portal is not enabled
+module petstoreApi 'apim-import-petstore-api.bicep' = {
+  name: 'petstore-api'
+  scope: resourceGroup
+  params: {
+    apimName: APIMName
+    userId: '1' // Default administrator user ID
+  }
+  dependsOn: [
+    apimWithPrivateEndpoint
+  ]
+}
+
 // Function App module removed - to be added back when storage issues are resolved
 
 /*
@@ -274,3 +288,10 @@ output petstoreApiSubscriptionId string = apimImportPetstoreApi.outputs.subscrip
 output petstoreApiPrimaryKey string = apimImportPetstoreApi.outputs.primaryKey
 output petstoreApiSecondaryKey string = apimImportPetstoreApi.outputs.secondaryKey
 */
+
+// Petstore API outputs (keys should be retrieved via Azure CLI for security)
+output petstoreApiName string = petstoreApi.outputs.apiName
+output petstoreApiId string = petstoreApi.outputs.apiId
+output petstoreApiSubscriptionId string = petstoreApi.outputs.subscriptionId
+output petstoreApiSubscriptionName string = petstoreApi.outputs.subscriptionName
+output petstoreApiSubscriptionDisplayName string = petstoreApi.outputs.subscriptionDisplayName

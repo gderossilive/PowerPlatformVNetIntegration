@@ -177,6 +177,11 @@ load_environment_variables() {
     set -a  # automatically export all variables
     source "$env_file"
     set +a  # stop auto-exporting
+
+    # Backward compatibility with APIM_SERVICE_NAME-only configuration
+    if [[ -z "${APIM_NAME:-}" && -n "${APIM_SERVICE_NAME:-}" ]]; then
+        export APIM_NAME="$APIM_SERVICE_NAME"
+    fi
     
     # Validate required environment variables
     local required_vars=(
@@ -305,7 +310,7 @@ get_custom_connector() {
             echo "$connector_id"
         else
             echo -e "${RED}${ERROR} Custom connector '$connector_name' not found in environment.${NC}" >&2
-            echo -e "${YELLOW}Please run ./3-CreateCustomConnector.sh first.${NC}" >&2
+            echo -e "${YELLOW}Please run ./3-CreateCustomConnector_v2.sh first.${NC}" >&2
             exit 1
         fi
     else

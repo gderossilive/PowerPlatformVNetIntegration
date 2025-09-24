@@ -16,15 +16,16 @@
 #     from the PowerShell version but with better authentication handling and cross-platform
 #     compatibility. It uses the proven approach from deploy-powerplatform-environment.sh.
 #
-#     IMPORTANT: This script handles automated environment creation, but requires manual steps
-#     for Dataverse provisioning and managed environment configuration due to API limitations.
+#     AUTOMATION OPTIONS: This script supports two automation modes:
+#     A) REST API Mode (default): Requires manual Dataverse and managed environment setup
+#     B) PAC CLI Mode: Fully automated Dataverse and managed environment provisioning
 #
 #     The script performs the following operations:
 #     1. ✅ AUTOMATED: Loads environment variables from a specified file
-#     2. ✅ AUTOMATED: Validates Azure CLI authentication and Power Platform permissions
+#     2. ✅ AUTOMATED: Validates authentication and Power Platform permissions  
 #     3. ✅ AUTOMATED: Creates a new Power Platform environment with the specified configuration
-#     4. ⚠️  MANUAL REQUIRED: Dataverse database provisioning (see manual steps below)
-#     5. ⚠️  MANUAL REQUIRED: Enable managed environment features (see manual steps below)
+#     4. 🔄 AUTOMATED/MANUAL: Dataverse database provisioning (PAC CLI mode: automated, REST API mode: manual)
+#     5. 🔄 AUTOMATED/MANUAL: Enable managed environment features (PAC CLI mode: automated, REST API mode: manual)
 #     6. ✅ AUTOMATED: Updates the environment file with the created environment details
 #
 # MANUAL STEPS REQUIRED AFTER SCRIPT COMPLETION:
@@ -87,6 +88,17 @@
 #     --disable-dataverse
 #         Disable Dataverse database creation
 #
+#     --use-pac-cli
+#         Use PAC CLI for fully automated environment creation (includes Dataverse + Managed Environment)
+#         Requires: pac auth create --deviceCode (PAC CLI authentication)
+#         Benefits: No manual steps, better reliability, automated managed environment setup
+#
+#     --enable-managed-env
+#         Enable managed environment features (only works with --use-pac-cli)
+#
+#     --disable-managed-env
+#         Disable managed environment features (default when using REST API)
+#
 #     --force
 #         Skip confirmation prompts and create the environment automatically.
 #         Useful for automated deployment scenarios.
@@ -144,6 +156,8 @@ set -e
 ENV_FILE="./.env"
 ENVIRONMENT_TYPE="Sandbox"
 ENABLE_DATAVERSE="true"
+USE_PAC_CLI="false"
+ENABLE_MANAGED_ENV="false"
 FORCE="false"
 SHOW_HELP="false"
 
@@ -194,6 +208,18 @@ while [[ $# -gt 0 ]]; do
             ;;
         --disable-dataverse)
             ENABLE_DATAVERSE="false"
+            shift
+            ;;
+        --use-pac-cli)
+            USE_PAC_CLI="true"
+            shift
+            ;;
+        --enable-managed-env)
+            ENABLE_MANAGED_ENV="true"
+            shift
+            ;;
+        --disable-managed-env)
+            ENABLE_MANAGED_ENV="false"
             shift
             ;;
         --force)

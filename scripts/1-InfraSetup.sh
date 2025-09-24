@@ -39,6 +39,11 @@ if [[ -f "./.env" ]]; then
     set -a  # Automatically export all variables
     source <(sed 's/\r$//' ./.env)
     set +a  # Stop automatically exporting
+
+    # Backward compatibility: if APIM_NAME not set but APIM_SERVICE_NAME is, map it
+    if [[ -z "${APIM_NAME:-}" && -n "${APIM_SERVICE_NAME:-}" ]]; then
+        export APIM_NAME="$APIM_SERVICE_NAME"
+    fi
     log_success "Environment variables loaded successfully."
 else
     log_warning ".env file not found. Please ensure required environment variables are set:"
@@ -66,6 +71,13 @@ if [[ ${#missing_vars[@]} -gt 0 ]]; then
 fi
 
 log_info "Required environment variables validated successfully."
+
+# Preserve existing Power Platform environment details for later reuse
+existing_power_platform_environment_id="${POWER_PLATFORM_ENVIRONMENT_ID:-}"
+existing_power_platform_environment_url="${POWER_PLATFORM_ENVIRONMENT_URL:-}"
+existing_dataverse_instance_url="${DATAVERSE_INSTANCE_URL:-}"
+existing_dataverse_organization_id="${DATAVERSE_ORGANIZATION_ID:-}"
+existing_dataverse_unique_name="${DATAVERSE_UNIQUE_NAME:-}"
 
 # Step 2: Azure CLI Authentication and Tenant Configuration
 log_info "Configuring Azure CLI authentication..."
@@ -109,6 +121,19 @@ if ! azd auth login --check-status >/dev/null 2>&1; then
     log_success "Azure Developer CLI authenticated successfully."
 else
     log_info "Azure Developer CLI already authenticated."
+fi
+
+# Initialize azd environment if it doesn't exist
+log_info "Initializing azd environment: $POWER_PLATFORM_ENVIRONMENT_NAME"
+if ! azd env select "$POWER_PLATFORM_ENVIRONMENT_NAME" >/dev/null 2>&1; then
+    log_info "Environment doesn't exist, creating new azd environment..."
+    if ! azd init -e "$POWER_PLATFORM_ENVIRONMENT_NAME" --no-prompt; then
+        log_error "Failed to initialize azd environment."
+        exit 1
+    fi
+    log_success "Azure Developer CLI environment initialized."
+else
+    log_info "Using existing azd environment: $POWER_PLATFORM_ENVIRONMENT_NAME"
 fi
 
 # Deploy infrastructure using azd
@@ -190,7 +215,7 @@ if [[ -n "$deployment_outputs" ]]; then
     [[ -n "$SECONDARY_VIRTUAL_NETWORK_NAME" ]] && echo "SECONDARY_VIRTUAL_NETWORK_NAME=$SECONDARY_VIRTUAL_NETWORK_NAME"
     [[ -n "$SECONDARY_SUBNET_NAME" ]] && echo "SECONDARY_SUBNET_NAME=$SECONDARY_SUBNET_NAME"
     [[ -n "$ENTERPRISE_POLICY_NAME" ]] && echo "ENTERPRISE_POLICY_NAME=$ENTERPRISE_POLICY_NAME"
-    [[ -n "$APIM_NAME" ]] && echo "APIM_NAME=$APIM_NAME"
+    [[ -n "$APIM_NAME" ]] && echo "APIM_SERVICE_NAME=$APIM_NAME"
     [[ -n "$APIM_ID" ]] && echo "APIM_ID=$APIM_ID"
     [[ -n "$APIM_PRIVATE_DNS_ZONE_ID" ]] && echo "APIM_PRIVATE_DNS_ZONE_ID=$APIM_PRIVATE_DNS_ZONE_ID"
     [[ -n "$APIM_PRIVATE_DNS_ZONE_NAME" ]] && echo "APIM_PRIVATE_DNS_ZONE_NAME=$APIM_PRIVATE_DNS_ZONE_NAME"
@@ -222,10 +247,28 @@ EOF
     [[ -n "$SECONDARY_VIRTUAL_NETWORK_NAME" ]] && echo "SECONDARY_VIRTUAL_NETWORK_NAME=$SECONDARY_VIRTUAL_NETWORK_NAME" >> "$env_file_path"
     [[ -n "$SECONDARY_SUBNET_NAME" ]] && echo "SECONDARY_SUBNET_NAME=$SECONDARY_SUBNET_NAME" >> "$env_file_path"
     [[ -n "$ENTERPRISE_POLICY_NAME" ]] && echo "ENTERPRISE_POLICY_NAME=$ENTERPRISE_POLICY_NAME" >> "$env_file_path"
-    [[ -n "$APIM_NAME" ]] && echo "APIM_NAME=$APIM_NAME" >> "$env_file_path"
+    [[ -n "$APIM_NAME" ]] && echo "APIM_SERVICE_NAME=$APIM_NAME" >> "$env_file_path"
+    [[ -n "$APIM_NAME" ]] && echo "APIM_SERVICE_NAME=$APIM_NAME" >> "$env_file_path"
     [[ -n "$APIM_ID" ]] && echo "APIM_ID=$APIM_ID" >> "$env_file_path"
     [[ -n "$APIM_PRIVATE_DNS_ZONE_ID" ]] && echo "APIM_PRIVATE_DNS_ZONE_ID=$APIM_PRIVATE_DNS_ZONE_ID" >> "$env_file_path"
     [[ -n "$APIM_PRIVATE_DNS_ZONE_NAME" ]] && echo "APIM_PRIVATE_DNS_ZONE_NAME=$APIM_PRIVATE_DNS_ZONE_NAME" >> "$env_file_path"
+
+    # Reapply Power Platform environment values if they were previously captured
+    if [[ -n "$existing_power_platform_environment_id" ]]; then
+        echo "POWER_PLATFORM_ENVIRONMENT_ID=$existing_power_platform_environment_id" >> "$env_file_path"
+    fi
+    if [[ -n "$existing_power_platform_environment_url" ]]; then
+        echo "POWER_PLATFORM_ENVIRONMENT_URL=$existing_power_platform_environment_url" >> "$env_file_path"
+    fi
+    if [[ -n "$existing_dataverse_instance_url" ]]; then
+        echo "DATAVERSE_INSTANCE_URL=$existing_dataverse_instance_url" >> "$env_file_path"
+    fi
+    if [[ -n "$existing_dataverse_organization_id" ]]; then
+        echo "DATAVERSE_ORGANIZATION_ID=$existing_dataverse_organization_id" >> "$env_file_path"
+    fi
+    if [[ -n "$existing_dataverse_unique_name" ]]; then
+        echo "DATAVERSE_UNIQUE_NAME=$existing_dataverse_unique_name" >> "$env_file_path"
+    fi
     
     log_success ".env file created successfully with deployment outputs."
 else
@@ -240,6 +283,22 @@ AZURE_LOCATION=$AZURE_LOCATION
 POWER_PLATFORM_ENVIRONMENT_NAME=$POWER_PLATFORM_ENVIRONMENT_NAME
 POWER_PLATFORM_LOCATION=$POWER_PLATFORM_LOCATION
 EOF
+
+    if [[ -n "$existing_power_platform_environment_id" ]]; then
+        echo "POWER_PLATFORM_ENVIRONMENT_ID=$existing_power_platform_environment_id" >> "$env_file_path"
+    fi
+    if [[ -n "$existing_power_platform_environment_url" ]]; then
+        echo "POWER_PLATFORM_ENVIRONMENT_URL=$existing_power_platform_environment_url" >> "$env_file_path"
+    fi
+    if [[ -n "$existing_dataverse_instance_url" ]]; then
+        echo "DATAVERSE_INSTANCE_URL=$existing_dataverse_instance_url" >> "$env_file_path"
+    fi
+    if [[ -n "$existing_dataverse_organization_id" ]]; then
+        echo "DATAVERSE_ORGANIZATION_ID=$existing_dataverse_organization_id" >> "$env_file_path"
+    fi
+    if [[ -n "$existing_dataverse_unique_name" ]]; then
+        echo "DATAVERSE_UNIQUE_NAME=$existing_dataverse_unique_name" >> "$env_file_path"
+    fi
     
     log_info "Basic .env file created. You may need to manually add deployment outputs."
 fi

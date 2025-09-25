@@ -1,0 +1,21 @@
+HTTP/2 202 
+date: Thu, 25 Sep 2025 11:03:54 GMT
+retry-after: 5
+content-length: 0
+strict-transport-security: max-age=31536000; includeSubDomains
+x-ms-islandgateway: _prdcm001neugb0_1
+x-ms-islandgateway: _prdcm001eusgb0_3
+x-ms-igw-tracking-id: 2a1174d3-a580-4947-bf91-2a0d4900879120250925110350_prdcm001neugb0_1
+x-ms-igw-tracking-id: e6e24f3e-b8e2-45cc-b11b-03f351c7887e20250925110351_prdcm001eusgb0_3
+mise-correlation-id: 2255aa5e-3a5d-4ce1-a718-28ab27dc7387
+mise-correlation-id: c25c965e-3975-43bd-acb7-f207aea65e34
+x-ms-destination-geo: unitedstates
+operation-location: https://unitedstates.api.bap.microsoft.com/providers/Microsoft.BusinessAppPlatform/lifecycleOperations/433210f4-4787-42ce-a2fc-55a18f1de21c?api-version=2019-10-01
+x-ms-request-id: eastus:04058c5d-bc8f-4f98-943b-09b06535f402
+x-ms-correlation-request-id: d831e7cb-8fdc-4974-81e5-c3777b3e0344
+x-ms-correlation-id: d831e7cb-8fdc-4974-81e5-c3777b3e0344
+server-timing: x-ms-igw-upstream-headers;dur=3276.9,x-ms-igw-req-overhead;dur=0.5
+x-content-type-options: nosniff
+x-ms-service-request-id: 2a1174d3-a580-4947-bf91-2a0d49008791
+x-ms-activity-vector: 00.01.IN.03.00
+

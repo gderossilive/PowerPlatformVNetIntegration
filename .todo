@@ -1,0 +1,3 @@
+- [ ] Move 0-CreatePowerPlatformEnvironment.sh to backup/
+- [ ] Move 3-CreateCustomConnector.sh to backup/
+- [x] Confirm 0-CreatePowerPlatformEnvironment-Enhanced.sh and 3-CreateCustomConnector_v2.sh stay in scripts/

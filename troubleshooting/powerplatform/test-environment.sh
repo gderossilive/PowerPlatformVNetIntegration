@@ -109,30 +109,35 @@ test_environment_connectivity() {
     # Test connectivity to Power Platform APIs
     local base_url="https://api.powerapps.com"
     local test_url="$base_url/providers/Microsoft.PowerApps/environments?api-version=2020-06-01"
-    
-    if test_connectivity "$test_url" 10 200; then
-        log_success "Power Platform API connectivity successful"
-    else
-        log_error "Cannot connect to Power Platform APIs"
-        return $EXIT_NETWORK_ERROR
-    fi
-    
-    # Test specific environment endpoint
-    local env_url="$base_url/providers/Microsoft.PowerApps/environments/$POWER_PLATFORM_ENVIRONMENT_ID?api-version=2020-06-01"
-    
+
     # Get access token for Power Platform
     local access_token=$(az account get-access-token --resource https://service.powerapps.com/ --query accessToken -o tsv 2>/dev/null)
-    
+
     if [[ -z "$access_token" ]]; then
         log_warning "Cannot get Power Platform access token"
         return $EXIT_AUTH_ERROR
     fi
-    
+
     local response=$(curl -s -w "%{http_code}" \
         -H "Authorization: Bearer $access_token" \
         -o /dev/null \
+        "$test_url" 2>/dev/null || echo "000")
+
+    if [[ "$response" == "200" ]]; then
+        log_success "Power Platform API connectivity successful"
+    else
+        log_error "Cannot connect to Power Platform APIs (HTTP $response)"
+        return $EXIT_NETWORK_ERROR
+    fi
+
+    # Test specific environment endpoint
+    local env_url="$base_url/providers/Microsoft.PowerApps/environments/$POWER_PLATFORM_ENVIRONMENT_ID?api-version=2020-06-01"
+
+    response=$(curl -s -w "%{http_code}" \
+        -H "Authorization: Bearer $access_token" \
+        -o /dev/null \
         "$env_url" 2>/dev/null || echo "000")
-    
+
     if [[ "$response" == "200" ]]; then
         log_success "Environment endpoint accessible"
         return $EXIT_SUCCESS
